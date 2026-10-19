@@ -1,6 +1,6 @@
-# Project name
+# Serve Service
 
-project-name is a learning-driven Git-to-deployment system designed to deepen practical understanding of DevOps and system architecture.
+Serve Service is a learning-driven Git-to-deployment system designed to deepen practical understanding of DevOps and system architecture.
 
 The initial goal is to connect a GitHub repository to a workflow that builds an application, runs it on a Linux host, and exposes it over HTTP.
 

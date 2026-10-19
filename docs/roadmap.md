@@ -2,7 +2,7 @@
 
 ## Project Goal
 
-project-name is a learning-driven Git-to-deployment system. It connects a GitHub repository to an automated workflow that builds an application, runs it on a Linux host, and exposes it over HTTP.
+Serve Service is a learning-driven Git-to-deployment system. It connects a GitHub repository to an automated workflow that builds an application, runs it on a Linux host, and exposes it over HTTP.
 
 The primary goal is to learn DevOps and system architecture by building and operating a realistic system. This is not initially a commercial product, but its features and engineering practices should be real.
 
