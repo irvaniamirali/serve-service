@@ -7,17 +7,18 @@ import (
 	"strings"
 
 	"github.com/irvaniamirali/serve-service/internal/deployments"
+	"github.com/irvaniamirali/serve-service/internal/deployments/ports"
 )
 
 const maxFailureMessageSize = 2000
 
 // TransitionDeploymentStatus validates and persists a lifecycle transition.
 type TransitionDeploymentStatus struct {
-	repository deployments.Repository
+	repository ports.Repository
 }
 
 func NewTransitionDeploymentStatus(
-	repository deployments.Repository,
+	repository ports.Repository,
 ) *TransitionDeploymentStatus {
 	return &TransitionDeploymentStatus{repository: repository}
 }

@@ -8,6 +8,7 @@ This project prioritizes real functionality, operational reliability, security, 
 
 ## Documentation
 
+- [Architecture](docs/architecture.md)
 - [Roadmap](docs/roadmap.md)
 - [Project Definition — M00](docs/milestones/M00-project-definition.md)
 - [Development Foundation — M01](docs/milestones/M01-development-foundation.md)

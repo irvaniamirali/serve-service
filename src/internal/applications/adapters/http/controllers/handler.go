@@ -1,4 +1,4 @@
-package applications
+package controllers
 
 import (
 	"errors"
@@ -7,7 +7,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	applicationdomain "github.com/irvaniamirali/serve-service/internal/applications"
 	"github.com/irvaniamirali/serve-service/internal/applications/usecase"
-	"github.com/irvaniamirali/serve-service/internal/httpx"
+	"github.com/irvaniamirali/serve-service/internal/platform/httpx"
 )
 
 // Handler translates application HTTP requests into use case calls.

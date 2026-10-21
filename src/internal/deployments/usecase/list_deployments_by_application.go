@@ -4,16 +4,17 @@ import (
 	"context"
 
 	"github.com/irvaniamirali/serve-service/internal/deployments"
+	"github.com/irvaniamirali/serve-service/internal/deployments/ports"
 )
 
 // ListDeploymentsByApplication returns one page of an application's history.
 type ListDeploymentsByApplication struct {
-	repository        deployments.Repository
+	repository        ports.Repository
 	applicationReader applicationReader
 }
 
 func NewListDeploymentsByApplication(
-	repository deployments.Repository,
+	repository ports.Repository,
 	applicationReader applicationReader,
 ) *ListDeploymentsByApplication {
 	return &ListDeploymentsByApplication{

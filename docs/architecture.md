@@ -2,9 +2,45 @@
 
 ## Status
 
-**Status:** Initial architecture; the M02 control API and persistence boundaries are implemented. Deployment execution and later integrations remain planned.
+**Status:** The M02 control API is implemented using module-oriented Clean Architecture boundaries. Deployment execution and later integrations remain planned.
 
 This document distinguishes implemented M02 behavior from the intended later deployment workflow.
+
+## Go Code Structure
+
+The Go module is under `src/`. Its implemented backend structure is:
+
+```text
+src/
+├── cmd/
+│   ├── migrate/
+│   └── server/
+└── internal/
+    ├── applications/
+    │   ├── adapters/
+    │   │   ├── http/controllers/
+    │   │   └── postgres/
+    │   ├── domain/
+    │   ├── ports/
+    │   └── usecase/
+    ├── bootstrap/
+    ├── deployments/
+    │   ├── adapters/
+    │   │   ├── http/controllers/
+    │   │   └── postgres/
+    │   ├── domain/
+    │   ├── ports/
+    │   └── usecase/
+    └── platform/
+        ├── config/
+        ├── database/
+        ├── httpx/
+        └── logging/
+```
+
+`domain` contains business models, rules, and errors. `usecase` coordinates operations against the small repository contracts in `ports`. HTTP controllers own Fiber request decoding and response mapping; PostgreSQL adapters own GORM persistence and database records. `platform` contains shared technical infrastructure, including the single database connection setup and embedded migrations. `bootstrap` is the composition root: it connects repositories to use cases, controllers, and routes. The command packages remain thin startup entry points.
+
+Dependencies point inward: domain code does not depend on transport or persistence; use cases consume ports; adapters implement or invoke those boundaries; only bootstrap wires concrete adapters. Applications and deployments remain distinct modules. Deployment use cases depend on an application-reader interface that returns the application domain type, not on the application's persistence implementation.
 
 ## Architectural Goals
 
@@ -260,8 +296,6 @@ M01 establishes the repository skeleton, configuration, logging, health endpoint
 It does not implement the complete deployment workflow, public user onboarding, multi-tenancy, billing, Kubernetes scheduling, or generalized buildpack support.
 
 ## M02 Implementation Boundary
-
-The Go module separates domain models and repository interfaces from focused use cases and HTTP handlers. `internal/applications` and `internal/deployments` own their domain models, repository implementations, and use cases; `internal/http/handlers` owns the Fiber handlers, while `internal/http` composes them with the health endpoint. `internal/database` opens the shared GORM database handle and embeds the Goose migrations.
 
 The HTTP API is under `/api/v1`. It supports application creation/retrieval, queued deployment creation/retrieval, and paginated deployment history. The database handle is created once during server startup and injected into both PostgreSQL repositories. Schema changes are managed only by Goose migrations; the repositories do not migrate the schema automatically. A forward migration adds the configured branch without changing the already-applied initial migration. Deployment history uses ID as a stable tie-breaker for equal timestamps.
 

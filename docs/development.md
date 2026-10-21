@@ -5,7 +5,7 @@
 - Go version specified in `src/go.mod`
 - Git
 - PostgreSQL
-- golangci-lint v2.1.6 for lint checks
+- golangci-lint v2.12.2 for lint checks
 
 ## Setup
 

@@ -4,16 +4,17 @@ import (
 	"context"
 
 	"github.com/irvaniamirali/serve-service/internal/applications"
+	"github.com/irvaniamirali/serve-service/internal/applications/ports"
 )
 
 // GetApplicationByID handles retrieving an application by its identifier.
 type GetApplicationByID struct {
-	repository applications.Repository
+	repository ports.Repository
 }
 
 // NewGetApplicationByID creates the application retrieval use case.
 func NewGetApplicationByID(
-	repository applications.Repository,
+	repository ports.Repository,
 ) *GetApplicationByID {
 	return &GetApplicationByID{repository: repository}
 }

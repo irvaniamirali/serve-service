@@ -1,14 +1,14 @@
-package deployments
+package controllers
 
 import (
 	"errors"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/irvaniamirali/serve-service/internal/applications"
+	applicationdomain "github.com/irvaniamirali/serve-service/internal/applications"
 	deploymentdomain "github.com/irvaniamirali/serve-service/internal/deployments"
 	"github.com/irvaniamirali/serve-service/internal/deployments/usecase"
-	"github.com/irvaniamirali/serve-service/internal/httpx"
+	"github.com/irvaniamirali/serve-service/internal/platform/httpx"
 )
 
 // Handler translates deployment HTTP requests into use case calls.
@@ -70,7 +70,7 @@ func (handler *Handler) create(ctx *fiber.Ctx) error {
 	if errors.Is(err, deploymentdomain.ErrValidation) {
 		return httpx.WriteError(ctx, fiber.StatusBadRequest, "validation_error", err.Error())
 	}
-	if errors.Is(err, applications.ErrNotFound) {
+	if errors.Is(err, applicationdomain.ErrNotFound) {
 		return httpx.WriteError(ctx, fiber.StatusNotFound, "application_not_found", "Application not found")
 	}
 	if err != nil {
@@ -113,7 +113,7 @@ func (handler *Handler) listByApplication(ctx *fiber.Ctx) error {
 		limit,
 		offset,
 	)
-	if errors.Is(err, applications.ErrNotFound) {
+	if errors.Is(err, applicationdomain.ErrNotFound) {
 		return httpx.WriteError(ctx, fiber.StatusNotFound, "application_not_found", "Application not found")
 	}
 	if err != nil {
