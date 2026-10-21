@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented. Functional, unit, HTTP, and PostgreSQL integration checks pass; `make check` is blocked only because `golangci-lint` is not installed in the available environment.
+Implemented. 
 
 ## Goal
 
