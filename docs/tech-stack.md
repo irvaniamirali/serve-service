@@ -36,7 +36,6 @@ Dependency and tool versions must be pinned in the relevant manifests, lockfiles
 | Logging                     | Go `log/slog`, or a compatible structured logging integration | Structured logs with consistent fields and useful deployment context.                                                |
 | Backend tests               | Go `testing` and Fiber-compatible HTTP testing                | Supports unit tests and HTTP-level verification.                                                                     |
 | Go formatting               | `gofmt`                                                       | Standardized Go formatting.                                                                                          |
-| Go linting                  | `golangci-lint`                                               | Consolidated static analysis and maintainability checks.                                                             |
 | Local dependencies          | Docker Compose                                                | Reproducible development services.                                                                                   |
 | CI                          | GitHub Actions                                                | Automated checks for proposed changes.                                                                               |
 

@@ -5,7 +5,6 @@
 - Go version specified in `src/go.mod`
 - Git
 - PostgreSQL
-- golangci-lint v2.12.2 for lint checks
 
 ## Setup
 
@@ -186,10 +185,6 @@ PORT must be an integer between 1 and 65535.
 ### Port already in use
 
 Set PORT to another available port.
-
-### Missing golangci-lint
-
-Install the version specified in this guide before running `make lint`.
 
 ### Tests fail
 
