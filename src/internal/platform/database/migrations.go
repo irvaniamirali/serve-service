@@ -4,12 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
 	"strconv"
 
-	"github.com/irvaniamirali/serve-service/internal/config"
+	"github.com/irvaniamirali/serve-service/internal/platform/config"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 )
@@ -32,7 +33,7 @@ func RunMigrationCommand(
 	ctx context.Context,
 	cfg config.Config,
 	command string,
-) error {
+) (returnErr error) {
 	databaseURL := url.URL{
 		Scheme: "postgres",
 		User:   url.UserPassword(cfg.DBUser, cfg.DBPassword),
@@ -48,7 +49,11 @@ func RunMigrationCommand(
 	if err != nil {
 		return fmt.Errorf("open database for migrations: %w", err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			returnErr = errors.Join(returnErr, fmt.Errorf("close database for migrations: %w", err))
+		}
+	}()
 
 	if err := db.PingContext(ctx); err != nil {
 		return fmt.Errorf("connect to database for migrations: %w", err)

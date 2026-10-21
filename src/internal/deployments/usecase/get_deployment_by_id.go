@@ -4,14 +4,15 @@ import (
 	"context"
 
 	"github.com/irvaniamirali/serve-service/internal/deployments"
+	"github.com/irvaniamirali/serve-service/internal/deployments/ports"
 )
 
 // GetDeploymentByID retrieves a deployment by its identifier.
 type GetDeploymentByID struct {
-	repository deployments.Repository
+	repository ports.Repository
 }
 
-func NewGetDeploymentByID(repository deployments.Repository) *GetDeploymentByID {
+func NewGetDeploymentByID(repository ports.Repository) *GetDeploymentByID {
 	return &GetDeploymentByID{repository: repository}
 }
 

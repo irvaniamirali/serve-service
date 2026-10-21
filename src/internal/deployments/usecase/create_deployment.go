@@ -6,16 +6,17 @@ import (
 	"strings"
 
 	"github.com/irvaniamirali/serve-service/internal/deployments"
+	"github.com/irvaniamirali/serve-service/internal/deployments/ports"
 )
 
 // CreateDeployment validates and persists a queued deployment request.
 type CreateDeployment struct {
-	repository        deployments.Repository
+	repository        ports.Repository
 	applicationReader applicationReader
 }
 
 func NewCreateDeployment(
-	repository deployments.Repository,
+	repository ports.Repository,
 	applicationReader applicationReader,
 ) *CreateDeployment {
 	return &CreateDeployment{

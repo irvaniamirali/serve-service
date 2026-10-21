@@ -1,39 +1,48 @@
-package deployments
+package postgres
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
-	"github.com/irvaniamirali/serve-service/internal/applications"
+	applicationdomain "github.com/irvaniamirali/serve-service/internal/applications"
+	"github.com/irvaniamirali/serve-service/internal/deployments"
 	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-// Repository defines persistence operations for deployments.
-type Repository interface {
-	Create(context.Context, int64, *string) (Deployment, error)
-	GetByID(context.Context, int64) (Deployment, error)
-	ListByApplication(context.Context, int64, int, int) ([]Deployment, error)
-	TransitionStatus(context.Context, int64, string, string, *string) (Deployment, error)
+// deploymentModel maps deployment records to the existing database schema.
+type deploymentModel struct {
+	ID            int64     `gorm:"primaryKey;column:id"`
+	ApplicationID int64     `gorm:"column:application_id"`
+	Status        string    `gorm:"column:status;default:queued"`
+	CommitSHA     *string   `gorm:"column:commit_sha"`
+	ErrorMessage  *string   `gorm:"column:error_message"`
+	CreatedAt     time.Time `gorm:"column:created_at"`
+	UpdatedAt     time.Time `gorm:"column:updated_at"`
 }
 
-// PostgresRepository persists deployments using the shared GORM database handle.
-type PostgresRepository struct {
+func (deploymentModel) TableName() string {
+	return "deployments"
+}
+
+// Repository persists deployments using the shared GORM database handle.
+type Repository struct {
 	db *gorm.DB
 }
 
-func NewPostgresRepository(db *gorm.DB) *PostgresRepository {
-	return &PostgresRepository{db: db}
+func NewRepository(db *gorm.DB) *Repository {
+	return &Repository{db: db}
 }
 
-func (repository *PostgresRepository) Create(
+func (repository *Repository) Create(
 	ctx context.Context,
 	applicationID int64,
 	commitSHA *string,
-) (Deployment, error) {
-	record := DeploymentModel{
+) (deployments.Deployment, error) {
+	record := deploymentModel{
 		ApplicationID: applicationID,
 		CommitSHA:     commitSHA,
 	}
@@ -42,10 +51,10 @@ func (repository *PostgresRepository) Create(
 		if errors.As(err, &postgresError) &&
 			postgresError.Code == "23503" &&
 			postgresError.ConstraintName == "deployments_application_id_fkey" {
-			return Deployment{}, applications.ErrNotFound
+			return deployments.Deployment{}, applicationdomain.ErrNotFound
 		}
 
-		return Deployment{}, fmt.Errorf(
+		return deployments.Deployment{}, fmt.Errorf(
 			"create deployment for application %d: %w",
 			applicationID,
 			err,
@@ -55,29 +64,29 @@ func (repository *PostgresRepository) Create(
 	return toDeployment(record), nil
 }
 
-func (repository *PostgresRepository) GetByID(
+func (repository *Repository) GetByID(
 	ctx context.Context,
 	id int64,
-) (Deployment, error) {
-	var record DeploymentModel
+) (deployments.Deployment, error) {
+	var record deploymentModel
 	err := repository.db.WithContext(ctx).First(&record, id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return Deployment{}, ErrNotFound
+		return deployments.Deployment{}, deployments.ErrNotFound
 	}
 	if err != nil {
-		return Deployment{}, fmt.Errorf("get deployment %d: %w", id, err)
+		return deployments.Deployment{}, fmt.Errorf("get deployment %d: %w", id, err)
 	}
 
 	return toDeployment(record), nil
 }
 
-func (repository *PostgresRepository) ListByApplication(
+func (repository *Repository) ListByApplication(
 	ctx context.Context,
 	applicationID int64,
 	limit int,
 	offset int,
-) ([]Deployment, error) {
-	var records []DeploymentModel
+) ([]deployments.Deployment, error) {
+	var records []deploymentModel
 	err := repository.db.WithContext(ctx).
 		Where("application_id = ?", applicationID).
 		Order("created_at DESC").
@@ -93,7 +102,7 @@ func (repository *PostgresRepository) ListByApplication(
 		)
 	}
 
-	result := make([]Deployment, 0, len(records))
+	result := make([]deployments.Deployment, 0, len(records))
 	for _, record := range records {
 		result = append(result, toDeployment(record))
 	}
@@ -101,14 +110,14 @@ func (repository *PostgresRepository) ListByApplication(
 	return result, nil
 }
 
-func (repository *PostgresRepository) TransitionStatus(
+func (repository *Repository) TransitionStatus(
 	ctx context.Context,
 	id int64,
 	expectedStatus string,
 	nextStatus string,
 	failureMessage *string,
-) (Deployment, error) {
-	var record DeploymentModel
+) (deployments.Deployment, error) {
+	var record deploymentModel
 	result := repository.db.WithContext(ctx).
 		Model(&record).
 		Clauses(clause.Returning{}).
@@ -119,26 +128,26 @@ func (repository *PostgresRepository) TransitionStatus(
 			"updated_at":    gorm.Expr("NOW()"),
 		})
 	if result.Error != nil {
-		return Deployment{}, fmt.Errorf("transition deployment %d status: %w", id, result.Error)
+		return deployments.Deployment{}, fmt.Errorf("transition deployment %d status: %w", id, result.Error)
 	}
 	if result.RowsAffected == 0 {
-		var current DeploymentModel
+		var current deploymentModel
 		err := repository.db.WithContext(ctx).First(&current, id).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return Deployment{}, ErrNotFound
+			return deployments.Deployment{}, deployments.ErrNotFound
 		}
 		if err != nil {
-			return Deployment{}, fmt.Errorf("check deployment %d status: %w", id, err)
+			return deployments.Deployment{}, fmt.Errorf("check deployment %d status: %w", id, err)
 		}
 
-		return Deployment{}, ErrConcurrentTransition
+		return deployments.Deployment{}, deployments.ErrConcurrentTransition
 	}
 
 	return toDeployment(record), nil
 }
 
-func toDeployment(record DeploymentModel) Deployment {
-	return Deployment{
+func toDeployment(record deploymentModel) deployments.Deployment {
+	return deployments.Deployment{
 		ID:            record.ID,
 		ApplicationID: record.ApplicationID,
 		Status:        record.Status,

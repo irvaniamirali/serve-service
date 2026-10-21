@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/irvaniamirali/serve-service/internal/applications"
+	"github.com/irvaniamirali/serve-service/internal/applications/ports"
 )
 
 // CreateApplicationInput contains the data required to create an application.
@@ -15,12 +16,12 @@ type CreateApplicationInput struct {
 
 // CreateApplication handles the application creation use case.
 type CreateApplication struct {
-	repository applications.Repository
+	repository ports.Repository
 }
 
 // NewCreateApplication creates the application use case.
 func NewCreateApplication(
-	repository applications.Repository,
+	repository ports.Repository,
 ) *CreateApplication {
 	return &CreateApplication{repository: repository}
 }

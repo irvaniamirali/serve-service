@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/irvaniamirali/serve-service/internal/config"
+	"github.com/irvaniamirali/serve-service/internal/platform/config"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )

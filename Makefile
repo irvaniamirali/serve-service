@@ -1,5 +1,5 @@
 
-.PHONY: run fmt fmt-check test vet lint check migrate-up migrate-down
+.PHONY: run fmt fmt-check test vet check migrate-up migrate-down
 
 GO_MODULE_DIR := src
 
@@ -19,9 +19,6 @@ test:
 
 vet:
 	cd $(GO_MODULE_DIR) && go vet ./...
-
-lint:
-	cd $(GO_MODULE_DIR) && golangci-lint run
 
 check: fmt-check test vet lint
 

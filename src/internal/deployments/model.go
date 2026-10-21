@@ -35,21 +35,6 @@ type Deployment struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-// DeploymentModel maps a deployment to the existing database schema.
-type DeploymentModel struct {
-	ID            int64     `gorm:"primaryKey;column:id"`
-	ApplicationID int64     `gorm:"column:application_id"`
-	Status        string    `gorm:"column:status;default:queued"`
-	CommitSHA     *string   `gorm:"column:commit_sha"`
-	ErrorMessage  *string   `gorm:"column:error_message"`
-	CreatedAt     time.Time `gorm:"column:created_at"`
-	UpdatedAt     time.Time `gorm:"column:updated_at"`
-}
-
-func (DeploymentModel) TableName() string {
-	return "deployments"
-}
-
 // CanTransition reports whether the lifecycle permits moving between states.
 func CanTransition(from, to string) bool {
 	switch from {

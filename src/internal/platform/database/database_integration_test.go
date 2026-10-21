@@ -9,12 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irvaniamirali/serve-service/internal/applications"
+	applicationdomain "github.com/irvaniamirali/serve-service/internal/applications"
+	applicationpostgres "github.com/irvaniamirali/serve-service/internal/applications/adapters/postgres"
 	"github.com/irvaniamirali/serve-service/internal/applications/usecase"
-	"github.com/irvaniamirali/serve-service/internal/config"
-	"github.com/irvaniamirali/serve-service/internal/database"
-	"github.com/irvaniamirali/serve-service/internal/deployments"
+	deploymentdomain "github.com/irvaniamirali/serve-service/internal/deployments"
+	deploymentpostgres "github.com/irvaniamirali/serve-service/internal/deployments/adapters/postgres"
 	deploymentusecase "github.com/irvaniamirali/serve-service/internal/deployments/usecase"
+	"github.com/irvaniamirali/serve-service/internal/platform/config"
+	"github.com/irvaniamirali/serve-service/internal/platform/database"
 )
 
 func TestPostgresPersistenceAndMigrations(t *testing.T) {
@@ -41,9 +43,9 @@ func TestPostgresPersistenceAndMigrations(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	applicationRepository := applications.NewApplicationRepository(db)
+	applicationRepository := applicationpostgres.NewRepository(db)
 	createApplication := usecase.NewCreateApplication(applicationRepository)
-	deploymentRepository := deployments.NewPostgresRepository(db)
+	deploymentRepository := deploymentpostgres.NewRepository(db)
 	createDeployment := deploymentusecase.NewCreateDeployment(
 		deploymentRepository,
 		applicationRepository,
@@ -74,7 +76,7 @@ func TestPostgresPersistenceAndMigrations(t *testing.T) {
 			RepositoryURL: "https://github.com/acme/duplicate.git",
 			Branch:        "main",
 		},
-	); !errors.Is(err, applications.ErrConflict) {
+	); !errors.Is(err, applicationdomain.ErrConflict) {
 		t.Fatalf("duplicate application creation error = %v, want ErrConflict", err)
 	}
 	t.Cleanup(func() {
@@ -96,8 +98,8 @@ func TestPostgresPersistenceAndMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create deployment: %v", err)
 	}
-	if deployment.Status != deployments.StatusQueued {
-		t.Fatalf("deployment status = %q, want %q", deployment.Status, deployments.StatusQueued)
+	if deployment.Status != deploymentdomain.StatusQueued {
+		t.Fatalf("deployment status = %q, want %q", deployment.Status, deploymentdomain.StatusQueued)
 	}
 	history, err := listDeploymentsByApplication.Execute(ctx, application.ID, 10, 0)
 	if err != nil {
@@ -109,14 +111,14 @@ func TestPostgresPersistenceAndMigrations(t *testing.T) {
 
 	transitionResults := make(chan error, 2)
 	var transitions sync.WaitGroup
-	for _, target := range []string{deployments.StatusBuilding, deployments.StatusCancelled} {
+	for _, target := range []string{deploymentdomain.StatusBuilding, deploymentdomain.StatusCancelled} {
 		transitions.Add(1)
 		go func(status string) {
 			defer transitions.Done()
 			_, transitionErr := deploymentRepository.TransitionStatus(
 				ctx,
 				deployment.ID,
-				deployments.StatusQueued,
+				deploymentdomain.StatusQueued,
 				status,
 				nil,
 			)
@@ -142,13 +144,13 @@ func TestPostgresPersistenceAndMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create deployment without known commit: %v", err)
 	}
-	if _, err := transitionDeploymentStatus.Execute(ctx, failedDeployment.ID, deployments.StatusBuilding, ""); err != nil {
+	if _, err := transitionDeploymentStatus.Execute(ctx, failedDeployment.ID, deploymentdomain.StatusBuilding, ""); err != nil {
 		t.Fatalf("transition deployment to building: %v", err)
 	}
 	failedDeployment, err = transitionDeploymentStatus.Execute(
 		ctx,
 		failedDeployment.ID,
-		deployments.StatusFailed,
+		deploymentdomain.StatusFailed,
 		"integration failure diagnostic",
 	)
 	if err != nil {
@@ -175,9 +177,9 @@ func TestPostgresPersistenceAndMigrations(t *testing.T) {
 		t.Fatalf("get reopened SQL database: %v", err)
 	}
 	t.Cleanup(func() { _ = persistedSQLDB.Close() })
-	persistedApplicationRepository := applications.NewApplicationRepository(persistedDB)
+	persistedApplicationRepository := applicationpostgres.NewRepository(persistedDB)
 	persistedGetApplicationByID := usecase.NewGetApplicationByID(persistedApplicationRepository)
-	persistedDeploymentRepository := deployments.NewPostgresRepository(persistedDB)
+	persistedDeploymentRepository := deploymentpostgres.NewRepository(persistedDB)
 	persistedApplication, err := persistedGetApplicationByID.Execute(ctx, application.ID)
 	if err != nil {
 		t.Fatalf("retrieve application after reopening pool: %v", err)
@@ -189,7 +191,7 @@ func TestPostgresPersistenceAndMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retrieve deployment after reopening pool: %v", err)
 	}
-	if persistedDeployment.Status != deployments.StatusBuilding && persistedDeployment.Status != deployments.StatusCancelled {
+	if persistedDeployment.Status != deploymentdomain.StatusBuilding && persistedDeployment.Status != deploymentdomain.StatusCancelled {
 		t.Errorf("persisted status = %q, want building or cancelled", persistedDeployment.Status)
 	}
 	persistedFailure, err := persistedDeploymentRepository.GetByID(ctx, failedDeployment.ID)

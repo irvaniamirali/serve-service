@@ -9,16 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	applicationdomain "github.com/irvaniamirali/serve-service/internal/applications"
-	"github.com/irvaniamirali/serve-service/internal/applications/usecase"
-	"github.com/irvaniamirali/serve-service/internal/config"
-	"github.com/irvaniamirali/serve-service/internal/database"
-	"github.com/irvaniamirali/serve-service/internal/deployments"
-	deploymentusecase "github.com/irvaniamirali/serve-service/internal/deployments/usecase"
-	httpserver "github.com/irvaniamirali/serve-service/internal/http"
-	applicationhandler "github.com/irvaniamirali/serve-service/internal/http/handlers/applications"
-	deploymenthandler "github.com/irvaniamirali/serve-service/internal/http/handlers/deployments"
-	"github.com/irvaniamirali/serve-service/internal/logging"
+	"github.com/irvaniamirali/serve-service/internal/bootstrap"
+	"github.com/irvaniamirali/serve-service/internal/platform/config"
+	"github.com/irvaniamirali/serve-service/internal/platform/database"
+	"github.com/irvaniamirali/serve-service/internal/platform/logging"
 	"github.com/joho/godotenv"
 )
 
@@ -54,47 +48,13 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("get underlying SQL database: %w", err)
 	}
-	defer sqlDB.Close()
+	defer func() {
+		if err := sqlDB.Close(); err != nil {
+			logger.Error("close database", "error", err)
+		}
+	}()
 
-	// Wire application persistence and use cases.
-	applicationRepository := applicationdomain.NewApplicationRepository(db)
-
-	createApplication := usecase.NewCreateApplication(
-		applicationRepository,
-	)
-	getApplicationByID := usecase.NewGetApplicationByID(
-		applicationRepository,
-	)
-
-	// Wire deployment dependencies.
-	deploymentRepository := deployments.NewPostgresRepository(db)
-	createDeployment := deploymentusecase.NewCreateDeployment(
-		deploymentRepository,
-		applicationRepository,
-	)
-	getDeploymentByID := deploymentusecase.NewGetDeploymentByID(
-		deploymentRepository,
-	)
-	listDeploymentsByApplication := deploymentusecase.NewListDeploymentsByApplication(
-		deploymentRepository,
-		applicationRepository,
-	)
-
-	// Build the HTTP server with its handlers.
-	applicationHTTPHandler := applicationhandler.NewHandler(
-		createApplication,
-		getApplicationByID,
-	)
-	deploymentHTTPHandler := deploymenthandler.NewHandler(
-		createDeployment,
-		getDeploymentByID,
-		listDeploymentsByApplication,
-	)
-
-	app := httpserver.NewServer(
-		applicationHTTPHandler,
-		deploymentHTTPHandler,
-	)
+	app := bootstrap.NewServer(db)
 
 	address := fmt.Sprintf(":%d", cfg.Port)
 	listenErrors := make(chan error, 1)

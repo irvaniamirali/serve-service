@@ -1,4 +1,4 @@
-package http
+package bootstrap
 
 import (
 	"context"
@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/irvaniamirali/serve-service/internal/applications"
+	applicationdomain "github.com/irvaniamirali/serve-service/internal/applications"
+	applicationhandler "github.com/irvaniamirali/serve-service/internal/applications/adapters/http/controllers"
 	"github.com/irvaniamirali/serve-service/internal/applications/usecase"
-	"github.com/irvaniamirali/serve-service/internal/deployments"
+	deploymentdomain "github.com/irvaniamirali/serve-service/internal/deployments"
+	deploymenthandler "github.com/irvaniamirali/serve-service/internal/deployments/adapters/http/controllers"
 	deploymentusecase "github.com/irvaniamirali/serve-service/internal/deployments/usecase"
-	applicationhandler "github.com/irvaniamirali/serve-service/internal/http/handlers/applications"
-	deploymenthandler "github.com/irvaniamirali/serve-service/internal/http/handlers/deployments"
 )
 
 func TestHealthEndpoint(t *testing.T) {
@@ -29,7 +29,7 @@ func TestHealthEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("send request: %v", err)
 	}
-	defer response.Body.Close()
+	defer closeResponse(t, response)
 
 	if response.StatusCode != fiber.StatusOK {
 		t.Errorf("status code = %d, want %d", response.StatusCode, fiber.StatusOK)
@@ -57,7 +57,7 @@ func TestApplicationAndDeploymentEndpoints(t *testing.T) {
 	if response.StatusCode != fiber.StatusCreated {
 		t.Fatalf("create application status = %d, want %d", response.StatusCode, fiber.StatusCreated)
 	}
-	var application applications.Application
+	var application applicationdomain.Application
 	decodeResponse(t, response, &application)
 	if application.ID != 1 || application.Name != "demo" || application.Branch != "main" {
 		t.Fatalf("unexpected application response: %+v", application)
@@ -69,10 +69,10 @@ func TestApplicationAndDeploymentEndpoints(t *testing.T) {
 		"branch": "main"
 	}`)
 	if response.StatusCode != fiber.StatusConflict {
-		response.Body.Close()
+		closeResponse(t, response)
 		t.Fatalf("duplicate application status = %d, want %d", response.StatusCode, fiber.StatusConflict)
 	}
-	response.Body.Close()
+	closeResponse(t, response)
 
 	response = sendRequest(t, app, http.MethodGet, "/api/v1/applications/1", "")
 	if response.StatusCode != fiber.StatusOK {
@@ -84,9 +84,9 @@ func TestApplicationAndDeploymentEndpoints(t *testing.T) {
 	if response.StatusCode != fiber.StatusCreated {
 		t.Fatalf("create deployment status = %d, want %d", response.StatusCode, fiber.StatusCreated)
 	}
-	var deployment deployments.Deployment
+	var deployment deploymentdomain.Deployment
 	decodeResponse(t, response, &deployment)
-	if deployment.Status != deployments.StatusQueued || deployment.ApplicationID != application.ID {
+	if deployment.Status != deploymentdomain.StatusQueued || deployment.ApplicationID != application.ID {
 		t.Fatalf("unexpected deployment response: %+v", deployment)
 	}
 
@@ -101,12 +101,12 @@ func TestApplicationAndDeploymentEndpoints(t *testing.T) {
 		t.Fatalf("list deployments status = %d, want %d", response.StatusCode, fiber.StatusOK)
 	}
 	var history struct {
-		Deployments []deployments.Deployment `json:"deployments"`
-		Limit       int                      `json:"limit"`
-		Offset      int                      `json:"offset"`
+		Deployments []deploymentdomain.Deployment `json:"deployments"`
+		Limit       int                           `json:"limit"`
+		Offset      int                           `json:"offset"`
 	}
 	decodeResponse(t, response, &history)
-	if len(history.Deployments) != 1 || history.Limit != deployments.DefaultPageSize {
+	if len(history.Deployments) != 1 || history.Limit != deploymentdomain.DefaultPageSize {
 		t.Fatalf("unexpected deployment history: %+v", history)
 	}
 }
@@ -119,10 +119,10 @@ func TestApplicationAndDeploymentEndpointErrors(t *testing.T) {
 		"branch": "main"
 	}`)
 	if createResponse.StatusCode != fiber.StatusCreated {
-		createResponse.Body.Close()
+		closeResponse(t, createResponse)
 		t.Fatalf("create test application status = %d, want %d", createResponse.StatusCode, fiber.StatusCreated)
 	}
-	createResponse.Body.Close()
+	closeResponse(t, createResponse)
 
 	tests := []struct {
 		name   string
@@ -144,7 +144,7 @@ func TestApplicationAndDeploymentEndpointErrors(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			response := sendRequest(t, app, test.method, test.path, test.body)
-			defer response.Body.Close()
+			defer closeResponse(t, response)
 			if response.StatusCode != test.status {
 				t.Fatalf("status = %d, want %d", response.StatusCode, test.status)
 			}
@@ -171,7 +171,7 @@ func newTestServer(applicationRepository *httpApplicationRepository, deploymentR
 		deploymentRepository,
 		applicationRepository,
 	)
-	return NewServer(
+	return newServer(
 		applicationhandler.NewHandler(createApplication, getApplicationByID),
 		deploymenthandler.NewHandler(
 			createDeployment,
@@ -197,24 +197,31 @@ func sendRequest(t *testing.T, app *fiber.App, method, path, body string) *http.
 
 func decodeResponse(t *testing.T, response *http.Response, destination any) {
 	t.Helper()
-	defer response.Body.Close()
+	defer closeResponse(t, response)
 	if err := json.NewDecoder(response.Body).Decode(destination); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 }
 
+func closeResponse(t *testing.T, response *http.Response) {
+	t.Helper()
+	if err := response.Body.Close(); err != nil {
+		t.Errorf("close response body: %v", err)
+	}
+}
+
 type httpApplicationRepository struct {
-	applicationsByID map[int64]applications.Application
+	applicationsByID map[int64]applicationdomain.Application
 	nextID           int64
 }
 
-func (repository *httpApplicationRepository) CreateApplication(_ context.Context, application applications.Application) (applications.Application, error) {
+func (repository *httpApplicationRepository) CreateApplication(_ context.Context, application applicationdomain.Application) (applicationdomain.Application, error) {
 	if repository.applicationsByID == nil {
-		repository.applicationsByID = make(map[int64]applications.Application)
+		repository.applicationsByID = make(map[int64]applicationdomain.Application)
 	}
 	for _, existing := range repository.applicationsByID {
 		if existing.Name == application.Name {
-			return applications.Application{}, applications.ErrConflict
+			return applicationdomain.Application{}, applicationdomain.ErrConflict
 		}
 	}
 	repository.nextID++
@@ -225,29 +232,29 @@ func (repository *httpApplicationRepository) CreateApplication(_ context.Context
 	return application, nil
 }
 
-func (repository *httpApplicationRepository) GetApplicationByID(_ context.Context, id int64) (applications.Application, error) {
+func (repository *httpApplicationRepository) GetApplicationByID(_ context.Context, id int64) (applicationdomain.Application, error) {
 	application, exists := repository.applicationsByID[id]
 	if !exists {
-		return applications.Application{}, applications.ErrNotFound
+		return applicationdomain.Application{}, applicationdomain.ErrNotFound
 	}
 	return application, nil
 }
 
 type httpDeploymentRepository struct {
-	deploymentsByID map[int64]deployments.Deployment
+	deploymentsByID map[int64]deploymentdomain.Deployment
 	nextID          int64
 }
 
-func (repository *httpDeploymentRepository) Create(_ context.Context, applicationID int64, commitSHA *string) (deployments.Deployment, error) {
+func (repository *httpDeploymentRepository) Create(_ context.Context, applicationID int64, commitSHA *string) (deploymentdomain.Deployment, error) {
 	if repository.deploymentsByID == nil {
-		repository.deploymentsByID = make(map[int64]deployments.Deployment)
+		repository.deploymentsByID = make(map[int64]deploymentdomain.Deployment)
 	}
 	repository.nextID++
 	now := time.Now()
-	deployment := deployments.Deployment{
+	deployment := deploymentdomain.Deployment{
 		ID:            repository.nextID,
 		ApplicationID: applicationID,
-		Status:        deployments.StatusQueued,
+		Status:        deploymentdomain.StatusQueued,
 		CommitSHA:     commitSHA,
 		CreatedAt:     now,
 		UpdatedAt:     now,
@@ -256,16 +263,16 @@ func (repository *httpDeploymentRepository) Create(_ context.Context, applicatio
 	return deployment, nil
 }
 
-func (repository *httpDeploymentRepository) GetByID(_ context.Context, id int64) (deployments.Deployment, error) {
+func (repository *httpDeploymentRepository) GetByID(_ context.Context, id int64) (deploymentdomain.Deployment, error) {
 	deployment, exists := repository.deploymentsByID[id]
 	if !exists {
-		return deployments.Deployment{}, deployments.ErrNotFound
+		return deploymentdomain.Deployment{}, deploymentdomain.ErrNotFound
 	}
 	return deployment, nil
 }
 
-func (repository *httpDeploymentRepository) ListByApplication(_ context.Context, applicationID int64, limit, offset int) ([]deployments.Deployment, error) {
-	result := make([]deployments.Deployment, 0)
+func (repository *httpDeploymentRepository) ListByApplication(_ context.Context, applicationID int64, limit, offset int) ([]deploymentdomain.Deployment, error) {
+	result := make([]deploymentdomain.Deployment, 0)
 	for _, deployment := range repository.deploymentsByID {
 		if deployment.ApplicationID == applicationID {
 			result = append(result, deployment)
@@ -274,13 +281,13 @@ func (repository *httpDeploymentRepository) ListByApplication(_ context.Context,
 	return result, nil
 }
 
-func (repository *httpDeploymentRepository) TransitionStatus(_ context.Context, id int64, expectedStatus, nextStatus string, failureMessage *string) (deployments.Deployment, error) {
+func (repository *httpDeploymentRepository) TransitionStatus(_ context.Context, id int64, expectedStatus, nextStatus string, failureMessage *string) (deploymentdomain.Deployment, error) {
 	deployment, exists := repository.deploymentsByID[id]
 	if !exists {
-		return deployments.Deployment{}, deployments.ErrNotFound
+		return deploymentdomain.Deployment{}, deploymentdomain.ErrNotFound
 	}
 	if deployment.Status != expectedStatus {
-		return deployments.Deployment{}, deployments.ErrInvalidTransition
+		return deploymentdomain.Deployment{}, deploymentdomain.ErrInvalidTransition
 	}
 	deployment.Status = nextStatus
 	deployment.ErrorMessage = failureMessage
