@@ -59,6 +59,42 @@ env PORT=9000 make run
 Existing process environment variables take precedence over values
 loaded from `.env`.
 
+## Run the frontend
+
+The frontend is a React 19, TypeScript, and Vite application in `web/`. It uses Tailwind CSS v4 and source components from the Space UI registry.
+
+Install frontend dependencies and configure the optional development proxy:
+
+```fish
+cd web
+npm install
+cp .env.example .env
+```
+
+Start the Go API in one terminal (`make run` from the repository root). In another terminal, start Vite:
+
+```fish
+cd web
+npm run dev
+```
+
+Open the local Vite URL shown in the terminal (normally `http://localhost:5173`). Vite proxies `/api` and `/health` requests to `BACKEND_URL`, which defaults to `http://localhost:8000`. Set `BACKEND_URL` in `web/.env` if the Go server uses another origin. `VITE_API_BASE_URL` defaults to `/api/v1` and should include the API prefix when overridden.
+
+The development proxy keeps browser requests same-origin; the Go API does not configure CORS. The API has no authentication. Applications can be created and retrieved by ID, but there is no application collection endpoint; deployment requests can be created/retrieved and history is available only for a known application ID. There is no global deployment list. The UI makes those limitations explicit and does not display simulated records. A successful manual request means it was queued in the API; builds, webhook processing, and runtime deployment are not implemented.
+
+Space UI components are installed as source with the official registry CLI. After the preset is initialized, components can be added with:
+
+```fish
+npx shadcn@latest add @spaceui/primitives-button @spaceui/primitives-card @spaceui/primitives-badge @spaceui/primitives-table @spaceui/primitives-input
+```
+
+Run the frontend production build and API-client unit tests:
+
+```fish
+npm run build
+npm test
+```
+
 ## Verify the application
 
 Check the health endpoint:
