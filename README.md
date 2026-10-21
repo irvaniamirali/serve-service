@@ -6,10 +6,6 @@ The initial goal is to connect a GitHub repository to a workflow that builds an 
 
 This project prioritizes real functionality, operational reliability, security, testing, and clear technical documentation over commercial launch goals.
 
-## Project Status
-
-Planning. Implementation begins after the initial scope, requirements, technology stack, and architecture are reviewed.
-
 ## Documentation
 
 - [Roadmap](docs/roadmap.md)
@@ -22,4 +18,4 @@ Planning. Implementation begins after the initial scope, requirements, technolog
 
 ## Guiding Principle
 
-Every milestone must have testable acceptance criteria and updated documentation. See `ROADMAP.md` for the current plan.
+Every milestone must have testable acceptance criteria and updated documentation. See [the roadmap](docs/roadmap.md) for the current plan.

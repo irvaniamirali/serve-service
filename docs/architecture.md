@@ -2,9 +2,9 @@
 
 ## Status
 
-**Status:** Initial proposal — pending review and acceptance during M00.
+**Status:** Initial architecture; the M02 control API and persistence boundaries are implemented. Deployment execution and later integrations remain planned.
 
-This document describes the intended architecture and initial deployment workflow. It does not claim that the described capabilities have already been implemented.
+This document distinguishes implemented M02 behavior from the intended later deployment workflow.
 
 ## Architectural Goals
 
@@ -39,14 +39,13 @@ The frontend must never access Docker directly or contain privileged infrastruct
 
 ### 2. Control API
 
-A Go HTTP application that exposes the control-plane API and GitHub webhook endpoint.
+A Go HTTP application that exposes the control-plane API and, in a later milestone, the GitHub webhook endpoint.
 
 Responsibilities:
-- Validate and persist repository registrations.
-- Verify GitHub webhook signatures.
-- Accept valid deployment events.
+- Validate and persist application registrations.
 - Create durable deployment records.
 - Expose project and deployment status.
+- In later milestones, verify GitHub webhook signatures and accept valid deployment events.
 
 Webhook handling must validate the event against the configured repository and branch. Duplicate deliveries should not cause uncontrolled duplicate deployments.
 
@@ -180,15 +179,15 @@ Readiness checks, replacement strategy, and rollback behavior must be specified 
 
 ## Deployment State Model
 
-The initial state model is:
+The M02 state model is:
 
 ```text
-queued -> running -> succeeded
-                  -> failed
-                  -> cancelled
+queued    -> building | cancelled
+building  -> deploying | failed | cancelled
+deploying -> healthy | failed | cancelled
 ```
 
-More detailed phases, such as `checking_out`, `building`, `starting`, and `routing`, may be recorded separately.
+`healthy`, `failed`, and `cancelled` are terminal. Failure transitions retain a concise failure message. M02 only creates `queued` deployments; the worker and execution phases are not implemented.
 
 State transitions must be validated. The implementation must account for duplicate webhook deliveries and workers stopping unexpectedly while a deployment is running.
 
@@ -259,3 +258,11 @@ Health endpoints must distinguish process liveness from dependency readiness.
 M01 establishes the repository skeleton, configuration, logging, health endpoints, local dependencies, quality checks, CI, and development documentation.
 
 It does not implement the complete deployment workflow, public user onboarding, multi-tenancy, billing, Kubernetes scheduling, or generalized buildpack support.
+
+## M02 Implementation Boundary
+
+The Go module separates domain models and repository interfaces from focused use cases and HTTP handlers. `internal/applications` and `internal/deployments` own their domain models, repository implementations, and use cases; `internal/http/handlers` owns the Fiber handlers, while `internal/http` composes them with the health endpoint. `internal/database` opens the shared GORM database handle and embeds the Goose migrations.
+
+The HTTP API is under `/api/v1`. It supports application creation/retrieval, queued deployment creation/retrieval, and paginated deployment history. The database handle is created once during server startup and injected into both PostgreSQL repositories. Schema changes are managed only by Goose migrations; the repositories do not migrate the schema automatically. A forward migration adds the configured branch without changing the already-applied initial migration. Deployment history uses ID as a stable tie-breaker for equal timestamps.
+
+There is intentionally no public status mutation route and no Git checkout, build, or runtime behavior in M02. Internal status transitions are validated in a deployment use case and use a conditional database update so competing transitions cannot both win from the same previous state.

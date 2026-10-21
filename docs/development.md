@@ -4,31 +4,47 @@
 
 - Go version specified in `src/go.mod`
 - Git
+- PostgreSQL
 - golangci-lint v2.1.6 for lint checks
 
 ## Setup
 
-Clone the repository and enter the Go module directory:
-
-```bash
-cd src
-```
+Run Makefile commands from the repository root. Go source and the module are under `src/`.
 
 Copy the example environment file:
 
-```bash
-cp .env.example .env
+```fish
+cp src/.env.example src/.env
 ```
 
 Download dependencies:
 
-```bash
+```fish
+cd src
 go mod download
+cd ..
 ```
+
+Create a PostgreSQL role and database for local development (use a local-only password and do not reuse it elsewhere):
+
+```sql
+CREATE ROLE serve_service LOGIN PASSWORD 'serve_service_dev';
+CREATE DATABASE serve_service OWNER serve_service;
+```
+
+The `.env.example` values match this local setup. Copy it to `src/.env` as above and change credentials as appropriate. The server and migration command load `.env` only in the development environment; explicitly supplied process environment variables take precedence.
+
+Apply schema migrations from the repository root:
+
+```fish
+make migrate-up
+```
+
+The server creates one shared GORM database handle for application and deployment requests. Apply migrations before starting it.
 
 ## Run the server
 
-```bash
+```fish
 make run
 ```
 
@@ -36,8 +52,8 @@ The server listens on port 8000 by default.
 
 Override configuration using environment variables:
 
-```bash
-PORT=9000 make run
+```fish
+env PORT=9000 make run
 ```
 
 Existing process environment variables take precedence over values
@@ -47,7 +63,7 @@ loaded from `.env`.
 
 Check the health endpoint:
 
-```bash
+```fish
 curl -i http://localhost:8000/health
 ```
 
@@ -57,17 +73,53 @@ Expected response body:
 {"status":"healthy"}
 ```
 
+## Core API
+
+API routes use the `/api/v1` prefix:
+
+| Method | Path | Success |
+|---|---|---|
+| `POST` | `/api/v1/applications` | `201 Created` |
+| `GET` | `/api/v1/applications/{id}` | `200 OK` |
+| `POST` | `/api/v1/applications/{id}/deployments` | `201 Created` |
+| `GET` | `/api/v1/deployments/{id}` | `200 OK` |
+| `GET` | `/api/v1/applications/{id}/deployments?limit=20&offset=0` | `200 OK` |
+
+Create an application:
+
+```fish
+curl -i -X POST http://localhost:8000/api/v1/applications \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"demo","repository_url":"https://github.com/acme/demo.git","branch":"main"}'
+```
+
+Queue a deployment with a known source commit (the body may be omitted if it is not known):
+
+```fish
+curl -i -X POST http://localhost:8000/api/v1/applications/1/deployments \
+  -H 'Content-Type: application/json' \
+  -d '{"commit_sha":"abcdef0123456789abcdef0123456789abcdef01"}'
+```
+
+Deployment requests are persisted with status `queued`; this API does not clone, build, or run the application. Deployment history sorts by creation time descending, with ID descending as the tie-breaker. `limit` defaults to 20 and must be 1–100; `offset` defaults to 0.
+
+Application repository URLs must use HTTPS or SSH and must not embed credentials (except the conventional `git` SSH username). Branch names must be valid Git refs. Commit IDs, when supplied, must contain 40 or 64 hexadecimal characters.
+
+The deployment transition graph is `queued -> building|cancelled`, `building -> deploying|failed|cancelled`, and `deploying -> healthy|failed|cancelled`. `healthy`, `failed`, and `cancelled` are terminal. A transition to `failed` requires a diagnostic message. No API endpoint accepts arbitrary status changes.
+
+Errors use `{"error":{"code":"...","message":"..."}}`. Invalid input returns `400`, missing applications/deployments `404`, duplicate names `409`, and unexpected failures return a generic `500` without internal database details.
+
 ## Quality checks
 
 Run all checks:
 
-```bash
+```fish
 make check
 ```
 
 Run individual checks:
 
-```bash
+```fish
 make fmt-check
 make test
 make vet
@@ -76,9 +128,18 @@ make lint
 
 To format Go files:
 
-```bash
+```fish
 make fmt
 ```
+
+PostgreSQL integration checks are opt-in so ordinary unit tests do not mutate a developer database. With a configured local database, run:
+
+```fish
+set -lx RUN_DATABASE_INTEGRATION_TESTS 1
+make test
+```
+
+The integration check applies pending migrations, verifies application/deployment persistence after reopening the database handle, and cleans up its own records.
 
 ## Troubleshooting
 

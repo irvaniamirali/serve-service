@@ -2,9 +2,9 @@
 
 ## Status
 
-**Status:** Proposed — pending review and acceptance during M00.
+**Status:** Go, Fiber v2, PostgreSQL/pgx, and Goose are implemented for M02. Other proposed integrations remain subject to review.
 
-This document describes the proposed technical stack for the initial release. Technology choices are not considered final solely because they appear here. Significant decisions should be reviewed and recorded in Architecture Decision Records (ADRs).
+This document describes the selected stack for implemented M02 behavior and proposed choices for later milestones. Significant new decisions should be reviewed and recorded in Architecture Decision Records (ADRs).
 
 Dependency and tool versions must be pinned in the relevant manifests, lockfiles, and CI configuration.
 
@@ -78,10 +78,10 @@ Building and running arbitrary repository code on the same host as the control p
 
 The initial release must be restricted to repositories trusted by the operator. Unrestricted public self-service deployments remain out of scope until stronger build isolation and workload security controls have been designed and tested.
 
-## Decisions to Confirm Before M01
+## Decisions Still to Confirm
 
-- [ ] Fiber version and required integrations.
-- [ ] PostgreSQL driver and migration tool.
+- [x] Fiber version and required integrations for the M02 API.
+- [x] PostgreSQL driver and migration tool for M02 persistence.
 - [ ] Docker Engine build/runtime integration.
 - [ ] Ingress proxy and controlled route updates.
 - [ ] Worker execution and job recovery strategy.
