@@ -27,6 +27,7 @@ jobs:
           cache-dependency-path: src/go.sum
 
       - name: Check formatting
+        working-directory: .
         run: make fmt-check
 
       - name: Run tests
