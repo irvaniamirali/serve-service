@@ -60,12 +60,12 @@ loaded from `.env`.
 
 ## Run the frontend
 
-The frontend is a React 19, TypeScript, and Vite application in `web/`. It uses Tailwind CSS v4 and source components from the Space UI registry.
+The frontend is a React 19, TypeScript, and Vite application in `frontend/`. It uses Tailwind CSS v4 and source components from the Space UI registry.
 
 Install frontend dependencies and configure the optional development proxy:
 
 ```fish
-cd web
+cd frontend
 npm install
 cp .env.example .env
 ```
@@ -73,7 +73,7 @@ cp .env.example .env
 Start the Go API in one terminal (`make run` from the repository root). In another terminal, start Vite:
 
 ```fish
-cd web
+cd frontend
 npm run dev
 ```
 
@@ -154,7 +154,7 @@ Application repository URLs must use HTTPS or SSH and must not embed credentials
 
 The deployment transition graph is `queued -> building|cancelled`, `building -> built|deploying|failed|cancelled`, `built -> deploying|failed|cancelled`, and `deploying -> healthy|failed|cancelled`. `healthy`, `failed`, and `cancelled` are terminal. A transition to `failed` requires a diagnostic message. No API endpoint accepts arbitrary status changes.
 
-The frontend repository form and deployment history/details are documented in [`web/README.md`](../web/README.md). The deployment form accepts an optional full SHA; build prerequisites and limitations are in the [Build Engine guide](./build-engine.md).
+The frontend repository form and deployment history/details are documented in [`frontend/README.md`](../frontend/README.md). The deployment form accepts an optional full SHA; build prerequisites and limitations are in the [Build Engine guide](./build-engine.md).
 
 Errors use `{"error":{"code":"...","message":"..."}}`. Invalid input returns `400`, missing applications/deployments `404`, duplicate names `409`, GitHub default-commit resolution failures `502`, and unexpected failures return a generic `500` without internal database details.
 
