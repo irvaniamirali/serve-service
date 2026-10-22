@@ -39,14 +39,14 @@ type Config struct {
 // Load reads and validates runtime configuration from the environment.
 func Load() (Config, error) {
 	cfg := Config{
-		AppEnv:             os.Getenv("APP_ENV"),
-		Port:               defaultPort,
-		DBHost:             getEnv("DB_HOST", defaultDBHost),
-		DBPort:             defaultDBPort,
-		DBUser:             getEnv("DB_USER", defaultDBUser),
-		DBPassword:         getEnv("DB_PASSWORD", defaultDBPassword),
-		DBName:             getEnv("DB_NAME", defaultDBName),
-		DBSSLMode:          getEnv("DB_SSLMODE", defaultDBSSLMode),
+		AppEnv:              os.Getenv("APP_ENV"),
+		Port:                defaultPort,
+		DBHost:              getEnv("DB_HOST", defaultDBHost),
+		DBPort:              defaultDBPort,
+		DBUser:              getEnv("DB_USER", defaultDBUser),
+		DBPassword:          getEnv("DB_PASSWORD", defaultDBPassword),
+		DBName:              getEnv("DB_NAME", defaultDBName),
+		DBSSLMode:           getEnv("DB_SSLMODE", defaultDBSSLMode),
 		GitHubWebhookSecret: getEnv("GITHUB_WEBHOOK_SECRET", ""),
 	}
 
