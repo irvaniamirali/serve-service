@@ -11,4 +11,5 @@ type Repository interface {
 	CreateApplication(context.Context, applications.Application) (applications.Application, error)
 	GetApplicationByID(context.Context, int64) (applications.Application, error)
 	GetApplicationByGitHubRepositoryID(context.Context, int64) (applications.Application, error)
+	ListApplications(context.Context, int, int) ([]applications.Application, error)
 }

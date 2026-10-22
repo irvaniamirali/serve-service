@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"errors"
 	"log/slog"
+	"os"
 
 	"github.com/gofiber/fiber/v2"
 	applicationcontroller "github.com/irvaniamirali/serve-service/internal/applications/adapters/http/controllers"
@@ -11,6 +12,7 @@ import (
 	deploymentcontroller "github.com/irvaniamirali/serve-service/internal/deployments/adapters/http/controllers"
 	deploymentpostgres "github.com/irvaniamirali/serve-service/internal/deployments/adapters/postgres"
 	deploymentusecase "github.com/irvaniamirali/serve-service/internal/deployments/usecase"
+	githubclient "github.com/irvaniamirali/serve-service/internal/github"
 	"github.com/irvaniamirali/serve-service/internal/platform/httpx"
 	"gorm.io/gorm"
 )
@@ -37,9 +39,14 @@ func NewServer(db *gorm.DB) *fiber.App {
 	applicationHTTPHandler := applicationcontroller.NewHandler(
 		applicationusecase.NewCreateApplication(applicationRepository),
 		applicationusecase.NewGetApplicationByID(applicationRepository),
+		applicationusecase.NewListApplications(applicationRepository),
 	)
 	deploymentHTTPHandler := deploymentcontroller.NewHandler(
-		deploymentusecase.NewCreateDeployment(deploymentRepository, applicationRepository),
+		deploymentusecase.NewCreateDeployment(
+			deploymentRepository,
+			applicationRepository,
+			githubclient.NewClient(os.Getenv("GITHUB_TOKEN")),
+		),
 		deploymentusecase.NewGetDeploymentByID(deploymentRepository),
 		deploymentusecase.NewListDeploymentsByApplication(deploymentRepository, applicationRepository),
 	)

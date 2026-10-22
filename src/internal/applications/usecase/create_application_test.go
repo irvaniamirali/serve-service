@@ -73,3 +73,7 @@ func (*createApplicationRepository) GetApplicationByGitHubRepositoryID(
 ) (applications.Application, error) {
 	return applications.Application{}, applications.ErrNotFound
 }
+
+func (*createApplicationRepository) ListApplications(context.Context, int, int) ([]applications.Application, error) {
+	return nil, nil
+}

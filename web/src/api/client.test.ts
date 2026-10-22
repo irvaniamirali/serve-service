@@ -76,6 +76,46 @@ describe('API client', () => {
     )
   })
 
+  it('lists registered applications using the paginated API contract', async () => {
+    const result = {
+      applications: [{
+        id: 12,
+        name: 'storefront',
+        repository_url: 'https://github.com/acme/storefront.git',
+        branch: 'main',
+        github_repository_id: 12345,
+        created_at: '2026-10-21T10:00:00Z',
+        updated_at: '2026-10-21T10:00:00Z',
+      }],
+      limit: 20,
+      offset: 0,
+    }
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(result), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(api.listApplications()).resolves.toEqual(result)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/applications?limit=20&offset=0',
+      { headers: { Accept: 'application/json' } },
+    )
+  })
+
+  it('requests persisted deployment build logs from the API', async () => {
+    const result = { deployment_id: 18, log: 'Step 1/1 : FROM scratch' }
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(result), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(api.getDeploymentBuildLog(18)).resolves.toEqual(result)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/deployments/18/logs',
+      { headers: { Accept: 'application/json' } },
+    )
+  })
+
   it('queues a deployment at the supported application endpoint', async () => {
     const deployment = {
       id: 18,
@@ -94,6 +134,31 @@ describe('API client', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/applications/7/deployments', {
       method: 'POST',
       body: JSON.stringify({ commit_sha: deployment.commit_sha }),
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+    })
+  })
+
+  it('requests the default-branch latest commit when no SHA is supplied', async () => {
+    const deployment = {
+      id: 19,
+      application_id: 7,
+      status: 'queued',
+      commit_sha: 'abcdef0123456789abcdef0123456789abcdef01',
+      created_at: '2026-10-21T10:00:00Z',
+      updated_at: '2026-10-21T10:00:00Z',
+    }
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(deployment), { status: 201 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(api.createDeployment(7)).resolves.toEqual(deployment)
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/applications/7/deployments', {
+      method: 'POST',
+      body: JSON.stringify({}),
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',

@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/irvaniamirali/serve-service/internal/applications"
@@ -11,7 +12,8 @@ import (
 
 func TestCreateDeploymentValidatesAndNormalizesCommit(t *testing.T) {
 	repository := &deploymentRepositoryFake{}
-	create := NewCreateDeployment(repository, applicationReaderFake{})
+	resolver := &defaultCommitResolverFake{}
+	create := NewCreateDeployment(repository, applicationReaderFake{}, resolver)
 
 	created, err := create.Execute(
 		context.Background(),
@@ -34,11 +36,90 @@ func TestCreateDeploymentValidatesAndNormalizesCommit(t *testing.T) {
 	if repository.createCalls != 1 {
 		t.Fatalf("Create calls = %d, want 1", repository.createCalls)
 	}
+	if resolver.calls != 0 {
+		t.Fatalf("default commit resolver calls = %d, want 0 for explicit commits", resolver.calls)
+	}
+}
+
+func TestCreateDeploymentResolvesAndPersistsDefaultBranchHead(t *testing.T) {
+	const resolvedSHA = "abcdef0123456789abcdef0123456789abcdef01"
+	const laterBranchSHA = "0123456789abcdef0123456789abcdef01234567"
+	repository := &deploymentRepositoryFake{}
+	resolver := &defaultCommitResolverFake{sha: "ABCDEF0123456789ABCDEF0123456789ABCDEF01"}
+	create := NewCreateDeployment(repository, applicationReaderFake{}, resolver)
+
+	created, err := create.Execute(context.Background(), 1, "")
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if resolver.calls != 1 {
+		t.Fatalf("default commit resolver calls = %d, want 1", resolver.calls)
+	}
+	if repository.commitSHA == nil || *repository.commitSHA != resolvedSHA ||
+		created.CommitSHA == nil || *created.CommitSHA != resolvedSHA {
+		t.Fatalf("persisted commit SHA = %v and response SHA = %v, want %s", repository.commitSHA, created.CommitSHA, resolvedSHA)
+	}
+
+	resolver.sha = laterBranchSHA
+	if repository.deployment.CommitSHA == nil || *repository.deployment.CommitSHA != resolvedSHA {
+		t.Fatalf("queued deployment SHA changed after branch advanced: %v", repository.deployment.CommitSHA)
+	}
+}
+
+func TestCreateDeploymentDoesNotFallbackWhenExplicitSHAIsInvalid(t *testing.T) {
+	repository := &deploymentRepositoryFake{}
+	resolver := &defaultCommitResolverFake{sha: "abcdef0123456789abcdef0123456789abcdef01"}
+	create := NewCreateDeployment(repository, applicationReaderFake{}, resolver)
+
+	_, err := create.Execute(context.Background(), 1, "invalid-sha")
+	if !errors.Is(err, deployments.ErrValidation) {
+		t.Fatalf("Execute() error = %v, want ErrValidation", err)
+	}
+	if repository.createCalls != 0 || resolver.calls != 0 {
+		t.Fatalf("invalid SHA triggered fallback or persistence: resolver calls=%d, create calls=%d", resolver.calls, repository.createCalls)
+	}
+
+	_, err = create.Execute(context.Background(), 1, strings.Repeat("0", 40))
+	if !errors.Is(err, deployments.ErrValidation) {
+		t.Fatalf("zero SHA error = %v, want ErrValidation", err)
+	}
+	if repository.createCalls != 0 || resolver.calls != 0 {
+		t.Fatalf("zero SHA triggered fallback or persistence: resolver calls=%d, create calls=%d", resolver.calls, repository.createCalls)
+	}
+}
+
+func TestCreateDeploymentFailsWhenDefaultBranchCannotBeResolved(t *testing.T) {
+	resolutionError := errors.New("GitHub API returned HTTP 404")
+	repository := &deploymentRepositoryFake{}
+	resolver := &defaultCommitResolverFake{err: resolutionError}
+	create := NewCreateDeployment(repository, applicationReaderFake{}, resolver)
+
+	_, err := create.Execute(context.Background(), 1, "")
+	if !errors.Is(err, deployments.ErrCommitResolution) || !errors.Is(err, resolutionError) {
+		t.Fatalf("Execute() error = %v, want wrapped commit-resolution error", err)
+	}
+	if repository.createCalls != 0 {
+		t.Fatalf("Create calls = %d, want 0 after resolution failure", repository.createCalls)
+	}
+}
+
+func TestCreateDeploymentRejectsInvalidResolvedSHA(t *testing.T) {
+	repository := &deploymentRepositoryFake{}
+	resolver := &defaultCommitResolverFake{sha: "branch-tip"}
+	create := NewCreateDeployment(repository, applicationReaderFake{}, resolver)
+
+	_, err := create.Execute(context.Background(), 1, "")
+	if !errors.Is(err, deployments.ErrCommitResolution) {
+		t.Fatalf("Execute() error = %v, want ErrCommitResolution", err)
+	}
+	if repository.createCalls != 0 {
+		t.Fatalf("Create calls = %d, want 0 for invalid resolved SHA", repository.createCalls)
+	}
 }
 
 func TestCreateDeploymentRequiresExistingApplication(t *testing.T) {
 	repository := &deploymentRepositoryFake{}
-	create := NewCreateDeployment(repository, applicationReaderFake{missing: true})
+	create := NewCreateDeployment(repository, applicationReaderFake{missing: true}, &defaultCommitResolverFake{})
 
 	_, err := create.Execute(context.Background(), 1, "")
 	if !errors.Is(err, applications.ErrNotFound) {
@@ -95,7 +176,25 @@ func (reader applicationReaderFake) GetApplicationByID(
 	if reader.missing || id != 1 {
 		return applications.Application{}, applications.ErrNotFound
 	}
-	return applications.Application{ID: id}, nil
+	return applications.Application{
+		ID:            id,
+		RepositoryURL: "https://github.com/acme/demo.git",
+		Branch:        "configured-branch",
+	}, nil
+}
+
+type defaultCommitResolverFake struct {
+	sha   string
+	err   error
+	calls int
+}
+
+func (resolver *defaultCommitResolverFake) ResolveDefaultBranchHead(
+	_ context.Context,
+	_ applications.Application,
+) (string, error) {
+	resolver.calls++
+	return resolver.sha, resolver.err
 }
 
 type deploymentRepositoryFake struct {

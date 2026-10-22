@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 const statusVariants: Record<string, 'secondary' | 'info' | 'success' | 'error' | 'outline'> = {
   queued: 'secondary',
   building: 'info',
+  built: 'success',
   deploying: 'info',
   healthy: 'success',
   failed: 'error',

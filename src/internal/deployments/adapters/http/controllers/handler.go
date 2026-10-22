@@ -34,6 +34,7 @@ func (handler *Handler) RegisterRoutes(router fiber.Router) {
 	router.Post("/applications/:id/deployments", handler.create)
 	router.Get("/applications/:id/deployments", handler.listByApplication)
 	router.Get("/deployments/:id", handler.get)
+	router.Get("/deployments/:id/logs", handler.getBuildLog)
 }
 
 type createRequest struct {
@@ -44,6 +45,11 @@ type listResponse struct {
 	Deployments []deploymentdomain.Deployment `json:"deployments"`
 	Limit       int                           `json:"limit"`
 	Offset      int                           `json:"offset"`
+}
+
+type buildLogResponse struct {
+	DeploymentID int64  `json:"deployment_id"`
+	Log          string `json:"log"`
 }
 
 func (handler *Handler) create(ctx *fiber.Ctx) error {
@@ -73,6 +79,14 @@ func (handler *Handler) create(ctx *fiber.Ctx) error {
 	if errors.Is(err, applicationdomain.ErrNotFound) {
 		return httpx.WriteError(ctx, fiber.StatusNotFound, "application_not_found", "Application not found")
 	}
+	if errors.Is(err, deploymentdomain.ErrCommitResolution) {
+		return httpx.WriteError(
+			ctx,
+			fiber.StatusBadGateway,
+			"commit_resolution_failed",
+			"Could not resolve the latest commit on the repository's GitHub default branch. Check repository metadata and GitHub API access.",
+		)
+	}
 	if err != nil {
 		return httpx.WriteInternalError(ctx, err)
 	}
@@ -92,6 +106,30 @@ func (handler *Handler) get(ctx *fiber.Ctx) error {
 		return httpx.WriteInternalError(ctx, err)
 	}
 	return ctx.Status(fiber.StatusOK).JSON(deployment)
+}
+
+func (handler *Handler) getBuildLog(ctx *fiber.Ctx) error {
+	id, err := parsePositiveID(ctx.Params("id"), "Deployment")
+	if err != nil {
+		return httpx.WriteError(ctx, fiber.StatusBadRequest, "invalid_request", err.Error())
+	}
+	deployment, err := handler.getDeploymentByID.Execute(ctx.UserContext(), id)
+	if errors.Is(err, deploymentdomain.ErrNotFound) {
+		return httpx.WriteError(ctx, fiber.StatusNotFound, "deployment_not_found", "Deployment not found")
+	}
+	if err != nil {
+		return httpx.WriteInternalError(ctx, err)
+	}
+
+	ctx.Set(fiber.HeaderCacheControl, "no-store")
+	log := ""
+	if deployment.BuildLog != nil {
+		log = *deployment.BuildLog
+	}
+	return ctx.Status(fiber.StatusOK).JSON(buildLogResponse{
+		DeploymentID: deployment.ID,
+		Log:          log,
+	})
 }
 
 func (handler *Handler) listByApplication(ctx *fiber.Ctx) error {

@@ -524,6 +524,45 @@
   margin-bottom: 12px;
 }
 
+.deployment-detail-card {
+  margin-top: 16px;
+}
+
+.deployment-detail-action {
+  display: flex;
+  justify-content: flex-end;
+  margin: 12px 0;
+}
+
+.build-log-section {
+  margin-top: 24px;
+  border-top: 1px solid #edf0ed;
+  padding-top: 16px;
+}
+
+.build-log-heading h3 {
+  margin: 0 0 5px;
+  color: #344139;
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.build-log {
+  max-height: 380px;
+  overflow: auto;
+  border: 1px solid #26332d;
+  border-radius: 8px;
+  margin: 12px 0 0;
+  background: #18211d;
+  padding: 14px;
+  color: #e0e8e2;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .table-wrap {
   max-width: 100%;
   overflow-x: auto;
@@ -566,6 +605,10 @@
 .status-building,
 .status-deploying {
   color: #4780aa;
+}
+
+.status-built {
+  color: #41805b;
 }
 
 .status-healthy {

@@ -45,8 +45,8 @@ function App() {
 
         <div className="sidebar-bottom">
           <div className="milestone-card">
-            <div className="milestone-top">M02 · Core API</div>
-            <p>Requests are recorded. Build and runtime execution are not implemented yet.</p>
+            <div className="milestone-top">M04 · Build Engine</div>
+            <p>Track exact-commit image builds. Runtime deployment is not implemented yet.</p>
           </div>
           <a className="github-link" href="https://github.com/irvaniamirali/serve-service" rel="noreferrer" target="_blank">
             <Code2 aria-hidden="true" size={15} /> Source repository

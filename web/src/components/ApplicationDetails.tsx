@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { api, type Application, type Deployment, ApiError } from '@/api/client'
 import { CopyValue } from '@/components/CopyValue'
+import { DeploymentDetails } from '@/components/DeploymentDetails'
 import { Notice } from '@/components/Notice'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Badge } from '@/components/ui/badge'
@@ -54,6 +55,7 @@ export function ApplicationDetails({
   const [commitSHA, setCommitSHA] = useState('')
   const [creatingDeployment, setCreatingDeployment] = useState(false)
   const [createdDeployment, setCreatedDeployment] = useState<Deployment | null>(null)
+  const [selectedDeploymentID, setSelectedDeploymentID] = useState<number | null>(null)
   const [createError, setCreateError] = useState('')
 
   async function refreshHistory(signal?: AbortSignal, offset = historyOffset) {
@@ -88,6 +90,7 @@ export function ApplicationDetails({
     setHistoryLoading(true)
     setHistoryError('')
     setCreatedDeployment(null)
+    setSelectedDeploymentID(null)
 
     api.getApplication(applicationId, controller.signal)
       .then((result) => setApplication(result))
@@ -114,6 +117,7 @@ export function ApplicationDetails({
     try {
       const created = await api.createDeployment(applicationId, commitSHA.trim())
       setCreatedDeployment(created)
+      setSelectedDeploymentID(created.id)
       setCommitSHA('')
       await refreshHistory(undefined, 0)
     } catch (error) {
@@ -157,6 +161,13 @@ export function ApplicationDetails({
               <dt>Branch</dt>
               <dd><code>{application.branch}</code></dd>
             </div>
+            <div className="detail-item">
+              <dt>GitHub webhook</dt>
+              <dd>{application.github_repository_id
+                ? `Repository #${application.github_repository_id}`
+                : 'Not linked'}
+              </dd>
+            </div>
             <div className="detail-item detail-wide">
               <dt>Repository</dt>
               <dd><a href={application.repository_url} rel="noreferrer" target="_blank">{application.repository_url}</a></dd>
@@ -177,13 +188,13 @@ export function ApplicationDetails({
         <CardHeader>
           <CardTitle>Request a deployment</CardTitle>
           <CardDescription>
-            This creates a queued deployment request only. It does not run a build or deploy code.
+            Leave the commit blank to use the latest commit on GitHub&apos;s default branch, or provide a full SHA to build that exact revision.
           </CardDescription>
         </CardHeader>
         <CardPanel>
           <form className="deployment-form" onSubmit={handleCreateDeployment}>
             <label className="field field-grow" htmlFor={`commit-${application.id}`}>
-              Commit SHA <span className="field-hint">Optional · 40 or 64 hexadecimal characters</span>
+              Commit SHA <span className="field-hint">Optional · full 40- or 64-character Git SHA</span>
               <Input
                 autoComplete="off"
                 className="text-input mono-input"
@@ -191,7 +202,8 @@ export function ApplicationDetails({
                 maxLength={64}
                 nativeInput
                 onChange={(event) => setCommitSHA(event.target.value)}
-                placeholder="Leave blank if not known"
+                pattern="[a-fA-F0-9]{40}|[a-fA-F0-9]{64}"
+                placeholder="Default branch latest, or enter a SHA"
                 value={commitSHA}
               />
             </label>
@@ -202,7 +214,11 @@ export function ApplicationDetails({
           {createError && <Notice kind="error">{createError}</Notice>}
           {createdDeployment && (
             <Notice kind="success">
-              Request #{createdDeployment.id} was created with status <strong>{createdDeployment.status}</strong>.
+              Deployment #{createdDeployment.id} was created for commit{' '}
+              {createdDeployment.commit_sha
+                ? <CopyValue compact label="resolved commit SHA" value={createdDeployment.commit_sha} />
+                : 'unresolved'}{' '}
+              with status <strong>{createdDeployment.status}</strong>. Its build will start when the worker claims it.
             </Notice>
           )}
         </CardPanel>
@@ -272,7 +288,9 @@ export function ApplicationDetails({
                     <TableHead>Status</TableHead>
                     <TableHead>Commit</TableHead>
                     <TableHead>Created</TableHead>
+                    <TableHead>Image</TableHead>
                     <TableHead>Failure details</TableHead>
+                    <TableHead>Details</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -287,7 +305,20 @@ export function ApplicationDetails({
                       </TableCell>
                       <TableCell>{formatDate(deployment.created_at)}</TableCell>
                       <TableCell className="failure-cell">
+                        {deployment.image_reference || <span className="muted">Not built</span>}
+                      </TableCell>
+                      <TableCell className="failure-cell">
                         {deployment.error_message || <span className="muted">—</span>}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          aria-label={`Open deployment ${deployment.id} details`}
+                          onClick={() => setSelectedDeploymentID(deployment.id)}
+                          size="sm"
+                          variant="outline"
+                        >
+                          Details
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -297,6 +328,12 @@ export function ApplicationDetails({
           )}
         </CardPanel>
       </Card>
+      {selectedDeploymentID !== null && (
+        <DeploymentDetails
+          deploymentId={selectedDeploymentID}
+          onClose={() => setSelectedDeploymentID(null)}
+        />
+      )}
     </div>
   )
 }

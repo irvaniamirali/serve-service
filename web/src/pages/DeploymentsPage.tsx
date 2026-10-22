@@ -3,6 +3,7 @@ import { Search } from 'lucide-react'
 import { api, ApiError, type Deployment } from '@/api/client'
 import { ApplicationDetails } from '@/components/ApplicationDetails'
 import { CopyValue } from '@/components/CopyValue'
+import { DeploymentDetails } from '@/components/DeploymentDetails'
 import { Notice } from '@/components/Notice'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
@@ -31,11 +32,13 @@ function DeploymentLookup() {
   const [deployment, setDeployment] = useState<Deployment | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [selectedDeploymentID, setSelectedDeploymentID] = useState<number | null>(null)
 
   async function lookupDeployment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
     setDeployment(null)
+    setSelectedDeploymentID(null)
     const id = parsePositiveId(lookupId)
     if (id === null) {
       setError('Enter a positive deployment ID.')
@@ -52,6 +55,7 @@ function DeploymentLookup() {
   }
 
   return (
+    <>
     <Card className="content-card">
       <CardHeader>
         <div className="card-heading-icon"><Search aria-hidden="true" size={16} /></div>
@@ -84,13 +88,18 @@ function DeploymentLookup() {
               </div>
               <StatusBadge status={deployment.status} />
             </div>
+            <div className="deployment-detail-action">
+              <Button onClick={() => setSelectedDeploymentID(deployment.id)} size="sm" variant="outline">
+                Open build details
+              </Button>
+            </div>
             <dl className="detail-grid">
               <div className="detail-item">
                 <dt>Application ID</dt>
                 <dd><CopyValue label="application ID" value={String(deployment.application_id)} /></dd>
               </div>
               <div className="detail-item">
-                <dt>Commit SHA</dt>
+                <dt>Resolved commit</dt>
                 <dd>{deployment.commit_sha ? <CopyValue compact label="commit SHA" value={deployment.commit_sha} /> : 'Not specified'}</dd>
               </div>
               <div className="detail-item">
@@ -112,6 +121,13 @@ function DeploymentLookup() {
         )}
       </CardPanel>
     </Card>
+    {selectedDeploymentID !== null && (
+      <DeploymentDetails
+        deploymentId={selectedDeploymentID}
+        onClose={() => setSelectedDeploymentID(null)}
+      />
+    )}
+    </>
   )
 }
 
@@ -144,7 +160,7 @@ export function DeploymentsPage({
           <p className="eyebrow">REQUEST HISTORY</p>
           <h1 id="deployments-title">Deployments</h1>
           <p className="page-subtitle">
-            Inspect recorded requests. The current API does not expose a global deployment list.
+            Inspect a selected application's history or open a deployment directly by ID.
           </p>
         </div>
       </div>
@@ -153,7 +169,7 @@ export function DeploymentsPage({
         <Card className="content-card">
           <CardHeader>
             <CardTitle>Application history</CardTitle>
-            <CardDescription>Load the most recent deployment requests for an application.</CardDescription>
+            <CardDescription>Select an application on the Applications page, or enter its ID to load history.</CardDescription>
           </CardHeader>
           <CardPanel>
             <form className="lookup-form" onSubmit={selectApplication}>

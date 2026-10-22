@@ -110,6 +110,29 @@ func (repository *Repository) GetApplicationByGitHubRepositoryID(
 	return toApplication(record), nil
 }
 
+// ListApplications returns a stable newest-first page of registered applications.
+func (repository *Repository) ListApplications(
+	ctx context.Context,
+	limit int,
+	offset int,
+) ([]applications.Application, error) {
+	var records []applicationModel
+	if err := repository.db.WithContext(ctx).
+		Order("id DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&records).Error; err != nil {
+		return nil, fmt.Errorf("list applications: %w", err)
+	}
+
+	result := make([]applications.Application, 0, len(records))
+	for _, record := range records {
+		result = append(result, toApplication(record))
+	}
+
+	return result, nil
+}
+
 // toApplication converts a database record into the domain model.
 func toApplication(record applicationModel) applications.Application {
 	return applications.Application{

@@ -3,8 +3,15 @@ export interface Application {
   name: string
   repository_url: string
   branch: string
+  github_repository_id?: number
   created_at: string
   updated_at: string
+}
+
+export interface ApplicationList {
+  applications: Application[]
+  limit: number
+  offset: number
 }
 
 export interface Deployment {
@@ -13,8 +20,17 @@ export interface Deployment {
   status: string
   commit_sha?: string
   error_message?: string
+  image_reference?: string
+  image_digest?: string
+  build_started_at?: string
+  build_finished_at?: string
   created_at: string
   updated_at: string
+}
+
+export interface DeploymentBuildLog {
+  deployment_id: number
+  log: string
 }
 
 export interface DeploymentHistory {
@@ -27,6 +43,7 @@ export interface CreateApplicationInput {
   name: string
   repository_url: string
   branch: string
+  github_repository_id?: number
 }
 
 export interface ApiFailure {
@@ -97,22 +114,39 @@ export const api = {
     })
   },
 
+  listApplications(
+    limit = 20,
+    offset = 0,
+    signal?: AbortSignal,
+  ): Promise<ApplicationList> {
+    const query = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    })
+    return request<ApplicationList>(`/applications?${query.toString()}`, { signal })
+  },
+
   getApplication(id: number, signal?: AbortSignal): Promise<Application> {
     return request<Application>(`/applications/${id}`, { signal })
   },
 
   createDeployment(
     applicationId: number,
-    commitSHA: string,
+    commitSHA?: string,
   ): Promise<Deployment> {
+    const normalizedCommitSHA = commitSHA?.trim()
     return request<Deployment>(`/applications/${applicationId}/deployments`, {
       method: 'POST',
-      body: JSON.stringify(commitSHA ? { commit_sha: commitSHA } : {}),
+      body: JSON.stringify(normalizedCommitSHA ? { commit_sha: normalizedCommitSHA } : {}),
     })
   },
 
   getDeployment(id: number, signal?: AbortSignal): Promise<Deployment> {
     return request<Deployment>(`/deployments/${id}`, { signal })
+  },
+
+  getDeploymentBuildLog(id: number, signal?: AbortSignal): Promise<DeploymentBuildLog> {
+    return request<DeploymentBuildLog>(`/deployments/${id}/logs`, { signal })
   },
 
   listDeployments(

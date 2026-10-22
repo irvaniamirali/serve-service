@@ -14,29 +14,40 @@ import (
 type Handler struct {
 	createApplication  *usecase.CreateApplication
 	getApplicationByID *usecase.GetApplicationByID
+	listApplications   *usecase.ListApplications
 }
 
 // NewHandler creates an HTTP handler with the required use cases.
 func NewHandler(
 	createApplication *usecase.CreateApplication,
 	getApplicationByID *usecase.GetApplicationByID,
+	listApplications *usecase.ListApplications,
 ) *Handler {
 	return &Handler{
 		createApplication:  createApplication,
 		getApplicationByID: getApplicationByID,
+		listApplications:   listApplications,
 	}
 }
 
 // RegisterRoutes registers the application endpoints.
 func (handler *Handler) RegisterRoutes(router fiber.Router) {
 	router.Post("/applications", handler.create)
+	router.Get("/applications", handler.list)
 	router.Get("/applications/:id", handler.get)
 }
 
+type listResponse struct {
+	Applications []applicationdomain.Application `json:"applications"`
+	Limit        int                             `json:"limit"`
+	Offset       int                             `json:"offset"`
+}
+
 type createRequest struct {
-	Name          string `json:"name"`
-	RepositoryURL string `json:"repository_url"`
-	Branch        string `json:"branch"`
+	Name               string `json:"name"`
+	RepositoryURL      string `json:"repository_url"`
+	Branch             string `json:"branch"`
+	GitHubRepositoryID *int64 `json:"github_repository_id"`
 }
 
 func (handler *Handler) create(ctx *fiber.Ctx) error {
@@ -54,9 +65,10 @@ func (handler *Handler) create(ctx *fiber.Ctx) error {
 	application, err := handler.createApplication.Execute(
 		ctx.UserContext(),
 		usecase.CreateApplicationInput{
-			Name:          request.Name,
-			RepositoryURL: request.RepositoryURL,
-			Branch:        request.Branch,
+			Name:               request.Name,
+			RepositoryURL:      request.RepositoryURL,
+			Branch:             request.Branch,
+			GitHubRepositoryID: request.GitHubRepositoryID,
 		},
 	)
 	if errors.Is(err, applicationdomain.ErrValidation) {
@@ -110,4 +122,36 @@ func (handler *Handler) get(ctx *fiber.Ctx) error {
 	}
 
 	return ctx.Status(fiber.StatusOK).JSON(application)
+}
+
+func (handler *Handler) list(ctx *fiber.Ctx) error {
+	limit, err := parseQueryInteger(ctx.Query("limit"), usecase.DefaultApplicationPageSize)
+	if err != nil || limit < 1 || limit > usecase.MaxApplicationPageSize {
+		return httpx.WriteError(ctx, fiber.StatusBadRequest, "invalid_request", "limit must be an integer between 1 and 100")
+	}
+	offset, err := parseQueryInteger(ctx.Query("offset"), 0)
+	if err != nil || offset < 0 {
+		return httpx.WriteError(ctx, fiber.StatusBadRequest, "invalid_request", "offset must be a non-negative integer")
+	}
+
+	applications, err := handler.listApplications.Execute(ctx.UserContext(), limit, offset)
+	if err != nil {
+		if errors.Is(err, applicationdomain.ErrValidation) {
+			return httpx.WriteError(ctx, fiber.StatusBadRequest, "invalid_request", err.Error())
+		}
+		return httpx.WriteInternalError(ctx, err)
+	}
+
+	return ctx.Status(fiber.StatusOK).JSON(listResponse{
+		Applications: applications,
+		Limit:        limit,
+		Offset:       offset,
+	})
+}
+
+func parseQueryInteger(raw string, fallback int) (int, error) {
+	if raw == "" {
+		return fallback, nil
+	}
+	return strconv.Atoi(raw)
 }

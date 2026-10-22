@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -65,6 +66,20 @@ func TestApplicationAndDeploymentEndpoints(t *testing.T) {
 	if application.ID != 1 || application.Name != "demo" || application.Branch != "main" {
 		t.Fatalf("unexpected application response: %+v", application)
 	}
+	response = sendRequest(t, app, http.MethodGet, "/api/v1/applications?limit=10&offset=0", "")
+	if response.StatusCode != fiber.StatusOK {
+		t.Fatalf("list applications status = %d, want %d", response.StatusCode, fiber.StatusOK)
+	}
+	var applicationList struct {
+		Applications []applicationdomain.Application `json:"applications"`
+		Limit        int                             `json:"limit"`
+		Offset       int                             `json:"offset"`
+	}
+	decodeResponse(t, response, &applicationList)
+	if len(applicationList.Applications) != 1 || applicationList.Applications[0].ID != application.ID ||
+		applicationList.Limit != 10 || applicationList.Offset != 0 {
+		t.Fatalf("unexpected application list: %+v", applicationList)
+	}
 
 	response = sendRequest(t, app, http.MethodPost, "/api/v1/applications", `{
 		"name": "demo",
@@ -83,12 +98,37 @@ func TestApplicationAndDeploymentEndpoints(t *testing.T) {
 	}
 	decodeResponse(t, response, &application)
 
+	response = sendRequest(t, app, http.MethodPost, "/api/v1/applications/1/deployments", `{}`)
+	if response.StatusCode != fiber.StatusCreated {
+		t.Fatalf("create default-branch deployment status = %d, want %d", response.StatusCode, fiber.StatusCreated)
+	}
+	var defaultDeployment deploymentdomain.Deployment
+	decodeResponse(t, response, &defaultDeployment)
+	if defaultDeployment.CommitSHA == nil || *defaultDeployment.CommitSHA != "abcdef0123456789abcdef0123456789abcdef01" {
+		t.Fatalf("default-branch deployment SHA = %v, want resolved immutable SHA", defaultDeployment.CommitSHA)
+	}
+
 	response = sendRequest(t, app, http.MethodPost, "/api/v1/applications/1/deployments", `{"commit_sha":"abcdef0123456789abcdef0123456789abcdef01"}`)
 	if response.StatusCode != fiber.StatusCreated {
 		t.Fatalf("create deployment status = %d, want %d", response.StatusCode, fiber.StatusCreated)
 	}
 	var deployment deploymentdomain.Deployment
 	decodeResponse(t, response, &deployment)
+	response = sendRequest(t, app, http.MethodGet, fmt.Sprintf("/api/v1/deployments/%d/logs", deployment.ID), "")
+	if response.StatusCode != fiber.StatusOK {
+		t.Fatalf("get deployment logs status = %d, want %d", response.StatusCode, fiber.StatusOK)
+	}
+	var buildLog struct {
+		DeploymentID int64  `json:"deployment_id"`
+		Log          string `json:"log"`
+	}
+	decodeResponse(t, response, &buildLog)
+	if buildLog.DeploymentID != deployment.ID || buildLog.Log != "" {
+		t.Fatalf("unexpected deployment logs response: %+v", buildLog)
+	}
+	if response.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("log cache policy = %q, want no-store", response.Header.Get("Cache-Control"))
+	}
 	if deployment.Status != deploymentdomain.StatusQueued || deployment.ApplicationID != application.ID {
 		t.Fatalf("unexpected deployment response: %+v", deployment)
 	}
@@ -109,7 +149,7 @@ func TestApplicationAndDeploymentEndpoints(t *testing.T) {
 		Offset      int                           `json:"offset"`
 	}
 	decodeResponse(t, response, &history)
-	if len(history.Deployments) != 1 || history.Limit != deploymentdomain.DefaultPageSize {
+	if len(history.Deployments) != 2 || history.Limit != deploymentdomain.DefaultPageSize {
 		t.Fatalf("unexpected deployment history: %+v", history)
 	}
 }
@@ -135,9 +175,11 @@ func TestApplicationAndDeploymentEndpointErrors(t *testing.T) {
 		status int
 	}{
 		{name: "invalid repository URL", method: http.MethodPost, path: "/api/v1/applications", body: `{"name":"demo","repository_url":"ftp://example.com/repo","branch":"main"}`, status: fiber.StatusBadRequest},
+		{name: "invalid application page size", method: http.MethodGet, path: "/api/v1/applications?limit=101", status: fiber.StatusBadRequest},
 		{name: "malformed JSON", method: http.MethodPost, path: "/api/v1/applications", body: `{"name":`, status: fiber.StatusBadRequest},
 		{name: "unknown application", method: http.MethodGet, path: "/api/v1/applications/42", status: fiber.StatusNotFound},
 		{name: "unknown deployment", method: http.MethodGet, path: "/api/v1/deployments/42", status: fiber.StatusNotFound},
+		{name: "unknown deployment logs", method: http.MethodGet, path: "/api/v1/deployments/42/logs", status: fiber.StatusNotFound},
 		{name: "unknown application history", method: http.MethodGet, path: "/api/v1/applications/42/deployments", status: fiber.StatusNotFound},
 		{name: "invalid application ID", method: http.MethodGet, path: "/api/v1/applications/not-an-id", status: fiber.StatusBadRequest},
 		{name: "unknown application deployment request", method: http.MethodPost, path: "/api/v1/applications/42/deployments", status: fiber.StatusNotFound},
@@ -159,6 +201,79 @@ func TestApplicationAndDeploymentEndpointErrors(t *testing.T) {
 				t.Fatalf("error response has no error field: %v", body)
 			}
 		})
+	}
+}
+
+func TestDeploymentCreationReturnsGatewayErrorWhenDefaultCommitCannotBeResolved(t *testing.T) {
+	app := newTestServerWithResolver(
+		&httpApplicationRepository{},
+		&httpDeploymentRepository{},
+		defaultCommitResolverFake{err: errors.New("GitHub API rate limit exceeded")},
+	)
+	response := sendRequest(t, app, http.MethodPost, "/api/v1/applications", `{
+		"name": "demo",
+		"repository_url": "https://github.com/acme/demo.git",
+		"branch": "release"
+	}`)
+	if response.StatusCode != fiber.StatusCreated {
+		closeResponse(t, response)
+		t.Fatalf("create test application status = %d, want %d", response.StatusCode, fiber.StatusCreated)
+	}
+	closeResponse(t, response)
+
+	response = sendRequest(t, app, http.MethodPost, "/api/v1/applications/1/deployments", `{}`)
+	defer closeResponse(t, response)
+	if response.StatusCode != fiber.StatusBadGateway {
+		t.Fatalf("create default-branch deployment status = %d, want %d", response.StatusCode, fiber.StatusBadGateway)
+	}
+	var body struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode resolution error: %v", err)
+	}
+	if body.Error.Code != "commit_resolution_failed" || !strings.Contains(body.Error.Message, "default branch") {
+		t.Fatalf("resolution error response = %+v", body)
+	}
+}
+
+func TestDeploymentLogsEndpointReturnsPlainJSONTextWithoutAddingLogsToDeployment(t *testing.T) {
+	buildLog := "Step 1/1 : FROM scratch\nSuccessfully built"
+	deploymentRepository := &httpDeploymentRepository{
+		deploymentsByID: map[int64]deploymentdomain.Deployment{
+			9: {
+				ID:       9,
+				Status:   deploymentdomain.StatusBuilt,
+				BuildLog: &buildLog,
+			},
+		},
+	}
+	app := newTestServer(&httpApplicationRepository{}, deploymentRepository)
+
+	response := sendRequest(t, app, http.MethodGet, "/api/v1/deployments/9/logs", "")
+	if response.StatusCode != fiber.StatusOK {
+		t.Fatalf("log endpoint status = %d, want %d", response.StatusCode, fiber.StatusOK)
+	}
+	var result struct {
+		DeploymentID int64  `json:"deployment_id"`
+		Log          string `json:"log"`
+	}
+	decodeResponse(t, response, &result)
+	if result.DeploymentID != 9 || result.Log != buildLog {
+		t.Fatalf("log response = %+v, want deployment 9 and original text", result)
+	}
+
+	response = sendRequest(t, app, http.MethodGet, "/api/v1/deployments/9", "")
+	if response.StatusCode != fiber.StatusOK {
+		t.Fatalf("deployment endpoint status = %d, want %d", response.StatusCode, fiber.StatusOK)
+	}
+	var deploymentResponse map[string]json.RawMessage
+	decodeResponse(t, response, &deploymentResponse)
+	if _, exists := deploymentResponse["build_log"]; exists {
+		t.Fatal("deployment JSON unexpectedly includes build logs")
 	}
 }
 
@@ -206,6 +321,11 @@ func TestGitHubWebhookPushCreatesDeployment(t *testing.T) {
 	if len(deploymentRepository.deploymentsByID) != 1 {
 		t.Fatalf("deployment count = %d, want 1", len(deploymentRepository.deploymentsByID))
 	}
+	for _, deployment := range deploymentRepository.deploymentsByID {
+		if deployment.CommitSHA == nil || *deployment.CommitSHA != "abcdef0123456789abcdef0123456789abcdef01" {
+			t.Fatalf("webhook deployment SHA = %v, want push event SHA", deployment.CommitSHA)
+		}
+	}
 }
 
 func TestGitHubWebhookRejectsInvalidSignature(t *testing.T) {
@@ -232,12 +352,26 @@ func TestGitHubWebhookRejectsInvalidSignature(t *testing.T) {
 }
 
 func newTestServer(applicationRepository *httpApplicationRepository, deploymentRepository *httpDeploymentRepository) *fiber.App {
+	return newTestServerWithResolver(
+		applicationRepository,
+		deploymentRepository,
+		defaultCommitResolverFake{sha: "abcdef0123456789abcdef0123456789abcdef01"},
+	)
+}
+
+func newTestServerWithResolver(
+	applicationRepository *httpApplicationRepository,
+	deploymentRepository *httpDeploymentRepository,
+	commitResolver deploymentusecase.DefaultCommitResolver,
+) *fiber.App {
 	setGitHubWebhookProcessor(applicationRepository, deploymentRepository, "test-secret", nil)
 	createApplication := usecase.NewCreateApplication(applicationRepository)
 	getApplicationByID := usecase.NewGetApplicationByID(applicationRepository)
+	listApplications := usecase.NewListApplications(applicationRepository)
 	createDeployment := deploymentusecase.NewCreateDeployment(
 		deploymentRepository,
 		applicationRepository,
+		commitResolver,
 	)
 	getDeploymentByID := deploymentusecase.NewGetDeploymentByID(deploymentRepository)
 	listDeploymentsByApplication := deploymentusecase.NewListDeploymentsByApplication(
@@ -245,13 +379,25 @@ func newTestServer(applicationRepository *httpApplicationRepository, deploymentR
 		applicationRepository,
 	)
 	return newServer(
-		applicationhandler.NewHandler(createApplication, getApplicationByID),
+		applicationhandler.NewHandler(createApplication, getApplicationByID, listApplications),
 		deploymenthandler.NewHandler(
 			createDeployment,
 			getDeploymentByID,
 			listDeploymentsByApplication,
 		),
 	)
+}
+
+type defaultCommitResolverFake struct {
+	sha string
+	err error
+}
+
+func (resolver defaultCommitResolverFake) ResolveDefaultBranchHead(
+	context.Context,
+	applicationdomain.Application,
+) (string, error) {
+	return resolver.sha, resolver.err
 }
 
 func sendRequest(t *testing.T, app *fiber.App, method, path, body string) *http.Response {
@@ -326,6 +472,21 @@ func (repository *httpApplicationRepository) GetApplicationByGitHubRepositoryID(
 		}
 	}
 	return applicationdomain.Application{}, applicationdomain.ErrNotFound
+}
+
+func (repository *httpApplicationRepository) ListApplications(_ context.Context, limit, offset int) ([]applicationdomain.Application, error) {
+	result := make([]applicationdomain.Application, 0, len(repository.applicationsByID))
+	for _, application := range repository.applicationsByID {
+		result = append(result, application)
+	}
+	if offset >= len(result) {
+		return []applicationdomain.Application{}, nil
+	}
+	result = result[offset:]
+	if limit < len(result) {
+		result = result[:limit]
+	}
+	return result, nil
 }
 
 type httpDeploymentRepository struct {
