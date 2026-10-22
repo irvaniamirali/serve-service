@@ -2,6 +2,9 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -159,7 +162,77 @@ func TestApplicationAndDeploymentEndpointErrors(t *testing.T) {
 	}
 }
 
+func TestGitHubWebhookPushCreatesDeployment(t *testing.T) {
+	applicationRepository := &httpApplicationRepository{}
+	deploymentRepository := &httpDeploymentRepository{}
+	ghRepositoryID := int64(42)
+	applicationRepository.applicationsByID = map[int64]applicationdomain.Application{
+		1: {
+			ID:                 1,
+			Name:               "demo",
+			RepositoryURL:      "https://github.com/acme/demo.git",
+			Branch:             "main",
+			GitHubRepositoryID: &ghRepositoryID,
+		},
+	}
+	applicationRepository.nextID = 1
+	app := newTestServer(applicationRepository, deploymentRepository)
+
+	payload := `{"ref":"refs/heads/main","after":"abcdef0123456789abcdef0123456789abcdef01","repository":{"id":42,"full_name":"acme/demo"}}`
+	signature := "sha256=" + signHMAC("test-secret", payload)
+	request, err := http.NewRequest(http.MethodPost, "/api/v1/webhooks/github", strings.NewReader(payload))
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	request.Header.Set("X-GitHub-Event", "push")
+	request.Header.Set("X-GitHub-Delivery", "delivery-1")
+	request.Header.Set("X-Hub-Signature-256", signature)
+
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("send request: %v", err)
+	}
+	defer closeResponse(t, response)
+	if response.StatusCode != fiber.StatusAccepted {
+		t.Fatalf("status = %d, want %d", response.StatusCode, fiber.StatusAccepted)
+	}
+	var result map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result["status"] != "processed" {
+		t.Fatalf("status response = %v, want processed", result)
+	}
+	if len(deploymentRepository.deploymentsByID) != 1 {
+		t.Fatalf("deployment count = %d, want 1", len(deploymentRepository.deploymentsByID))
+	}
+}
+
+func TestGitHubWebhookRejectsInvalidSignature(t *testing.T) {
+	applicationRepository := &httpApplicationRepository{}
+	deploymentRepository := &httpDeploymentRepository{}
+	app := newTestServer(applicationRepository, deploymentRepository)
+	payload := `{"ref":"refs/heads/main","after":"abcdef0123456789abcdef0123456789abcdef01","repository":{"id":8,"full_name":"acme/demo"}}`
+	request, err := http.NewRequest(http.MethodPost, "/api/v1/webhooks/github", strings.NewReader(payload))
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	request.Header.Set("X-GitHub-Event", "push")
+	request.Header.Set("X-GitHub-Delivery", "delivery-2")
+	request.Header.Set("X-Hub-Signature-256", "sha256=deadbeef")
+
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("send request: %v", err)
+	}
+	defer closeResponse(t, response)
+	if response.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", response.StatusCode, fiber.StatusUnauthorized)
+	}
+}
+
 func newTestServer(applicationRepository *httpApplicationRepository, deploymentRepository *httpDeploymentRepository) *fiber.App {
+	setGitHubWebhookProcessor(applicationRepository, deploymentRepository, "test-secret", nil)
 	createApplication := usecase.NewCreateApplication(applicationRepository)
 	getApplicationByID := usecase.NewGetApplicationByID(applicationRepository)
 	createDeployment := deploymentusecase.NewCreateDeployment(
@@ -210,6 +283,12 @@ func closeResponse(t *testing.T, response *http.Response) {
 	}
 }
 
+func signHMAC(secret, payload string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(payload))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
 type httpApplicationRepository struct {
 	applicationsByID map[int64]applicationdomain.Application
 	nextID           int64
@@ -238,6 +317,15 @@ func (repository *httpApplicationRepository) GetApplicationByID(_ context.Contex
 		return applicationdomain.Application{}, applicationdomain.ErrNotFound
 	}
 	return application, nil
+}
+
+func (repository *httpApplicationRepository) GetApplicationByGitHubRepositoryID(_ context.Context, githubRepositoryID int64) (applicationdomain.Application, error) {
+	for _, application := range repository.applicationsByID {
+		if application.GitHubRepositoryID != nil && *application.GitHubRepositoryID == githubRepositoryID {
+			return application, nil
+		}
+	}
+	return applicationdomain.Application{}, applicationdomain.ErrNotFound
 }
 
 type httpDeploymentRepository struct {

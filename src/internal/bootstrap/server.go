@@ -28,6 +28,12 @@ type healthResponse struct {
 func NewServer(db *gorm.DB) *fiber.App {
 	applicationRepository := applicationpostgres.NewRepository(db)
 	deploymentRepository := deploymentpostgres.NewRepository(db)
+	setGitHubWebhookProcessor(
+		applicationRepository,
+		deploymentRepository,
+		webhookSecretFromEnvironment(),
+		db,
+	)
 	applicationHTTPHandler := applicationcontroller.NewHandler(
 		applicationusecase.NewCreateApplication(applicationRepository),
 		applicationusecase.NewGetApplicationByID(applicationRepository),
@@ -64,6 +70,7 @@ func newServer(applicationHTTPHandler, deploymentHTTPHandler routeRegistrar) *fi
 	})
 
 	app.Get(healthPath, healthHandler)
+	registerGitHubWebhookRoute(app)
 	api := app.Group("/api/v1")
 	applicationHTTPHandler.RegisterRoutes(api)
 	deploymentHTTPHandler.RegisterRoutes(api)

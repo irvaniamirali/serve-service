@@ -12,6 +12,9 @@ func Validate(application Application) error {
 		strings.TrimSpace(application.Branch) == "" {
 		return ErrValidation
 	}
+	if application.GitHubRepositoryID != nil && *application.GitHubRepositoryID < 1 {
+		return ErrValidation
+	}
 
 	parsedURL, err := url.ParseRequestURI(application.RepositoryURL)
 	if err != nil || parsedURL.Host == "" ||

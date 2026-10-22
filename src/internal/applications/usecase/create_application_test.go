@@ -66,3 +66,10 @@ func (*createApplicationRepository) GetApplicationByID(
 ) (applications.Application, error) {
 	return applications.Application{}, applications.ErrNotFound
 }
+
+func (*createApplicationRepository) GetApplicationByGitHubRepositoryID(
+	context.Context,
+	int64,
+) (applications.Application, error) {
+	return applications.Application{}, applications.ErrNotFound
+}

@@ -13,12 +13,14 @@ import (
 
 // applicationModel maps application records to the existing database schema.
 type applicationModel struct {
-	ID            int64     `gorm:"primaryKey;column:id"`
-	Name          string    `gorm:"column:name"`
-	RepositoryURL string    `gorm:"column:repository_url"`
-	Branch        string    `gorm:"column:branch"`
-	CreatedAt     time.Time `gorm:"column:created_at"`
-	UpdatedAt     time.Time `gorm:"column:updated_at"`
+	ID                 int64     `gorm:"primaryKey;column:id"`
+	Name               string    `gorm:"column:name"`
+	RepositoryURL      string    `gorm:"column:repository_url"`
+	Branch             string    `gorm:"column:branch"`
+	GitHubRepositoryID *int64    `gorm:"column:github_repository_id"`
+	WebhookSecret      string    `gorm:"column:webhook_secret"`
+	CreatedAt          time.Time `gorm:"column:created_at"`
+	UpdatedAt          time.Time `gorm:"column:updated_at"`
 }
 
 func (applicationModel) TableName() string {
@@ -40,9 +42,11 @@ func (repository *Repository) CreateApplication(
 	application applications.Application,
 ) (applications.Application, error) {
 	record := applicationModel{
-		Name:          application.Name,
-		RepositoryURL: application.RepositoryURL,
-		Branch:        application.Branch,
+		Name:               application.Name,
+		RepositoryURL:      application.RepositoryURL,
+		Branch:             application.Branch,
+		GitHubRepositoryID: application.GitHubRepositoryID,
+		WebhookSecret:      application.WebhookSecret,
 	}
 
 	err := repository.db.WithContext(ctx).Create(&record).Error
@@ -51,7 +55,8 @@ func (repository *Repository) CreateApplication(
 
 		if errors.As(err, &postgresError) &&
 			postgresError.Code == "23505" &&
-			postgresError.ConstraintName == "applications_name_key" {
+			(postgresError.ConstraintName == "applications_name_key" ||
+				postgresError.ConstraintName == "applications_github_repository_id_key") {
 			return applications.Application{}, applications.ErrConflict
 		}
 
@@ -84,14 +89,37 @@ func (repository *Repository) GetApplicationByID(
 	return toApplication(record), nil
 }
 
+func (repository *Repository) GetApplicationByGitHubRepositoryID(
+	ctx context.Context,
+	githubRepositoryID int64,
+) (applications.Application, error) {
+	var record applicationModel
+
+	err := repository.db.WithContext(ctx).Where("github_repository_id = ?", githubRepositoryID).First(&record).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return applications.Application{}, applications.ErrNotFound
+	}
+	if err != nil {
+		return applications.Application{}, fmt.Errorf(
+			"get application by GitHub repository ID %d: %w",
+			githubRepositoryID,
+			err,
+		)
+	}
+
+	return toApplication(record), nil
+}
+
 // toApplication converts a database record into the domain model.
 func toApplication(record applicationModel) applications.Application {
 	return applications.Application{
-		ID:            record.ID,
-		Name:          record.Name,
-		RepositoryURL: record.RepositoryURL,
-		Branch:        record.Branch,
-		CreatedAt:     record.CreatedAt,
-		UpdatedAt:     record.UpdatedAt,
+		ID:                 record.ID,
+		Name:               record.Name,
+		RepositoryURL:      record.RepositoryURL,
+		Branch:             record.Branch,
+		GitHubRepositoryID: record.GitHubRepositoryID,
+		WebhookSecret:      record.WebhookSecret,
+		CreatedAt:          record.CreatedAt,
+		UpdatedAt:          record.UpdatedAt,
 	}
 }

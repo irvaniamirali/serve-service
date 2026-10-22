@@ -9,9 +9,11 @@ import (
 
 // CreateApplicationInput contains the data required to create an application.
 type CreateApplicationInput struct {
-	Name          string
-	RepositoryURL string
-	Branch        string
+	Name               string
+	RepositoryURL      string
+	Branch             string
+	GitHubRepositoryID *int64
+	WebhookSecret      string
 }
 
 // CreateApplication handles the application creation use case.
@@ -32,9 +34,11 @@ func (usecase *CreateApplication) Execute(
 	input CreateApplicationInput,
 ) (applications.Application, error) {
 	application := applications.Application{
-		Name:          input.Name,
-		RepositoryURL: input.RepositoryURL,
-		Branch:        input.Branch,
+		Name:               input.Name,
+		RepositoryURL:      input.RepositoryURL,
+		Branch:             input.Branch,
+		GitHubRepositoryID: input.GitHubRepositoryID,
+		WebhookSecret:      input.WebhookSecret,
 	}
 
 	if err := applications.Validate(application); err != nil {
