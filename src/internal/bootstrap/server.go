@@ -6,14 +6,14 @@ import (
 	"os"
 
 	"github.com/gofiber/fiber/v2"
-	applicationcontroller "github.com/irvaniamirali/serve-service/internal/applications/adapters/http/controllers"
-	applicationpostgres "github.com/irvaniamirali/serve-service/internal/applications/adapters/postgres"
-	applicationusecase "github.com/irvaniamirali/serve-service/internal/applications/usecase"
-	deploymentcontroller "github.com/irvaniamirali/serve-service/internal/deployments/adapters/http/controllers"
-	deploymentpostgres "github.com/irvaniamirali/serve-service/internal/deployments/adapters/postgres"
-	deploymentusecase "github.com/irvaniamirali/serve-service/internal/deployments/usecase"
+	applicationcontroller "github.com/irvaniamirali/serve-service/internal/domains/applications/adapters/http/controllers"
+	applicationpostgres "github.com/irvaniamirali/serve-service/internal/domains/applications/adapters/postgres"
+	"github.com/irvaniamirali/serve-service/internal/domains/applications/usecase"
+	deploymentcontroller "github.com/irvaniamirali/serve-service/internal/domains/deployments/adapters/http/controllers"
+	deploymentpostgres "github.com/irvaniamirali/serve-service/internal/domains/deployments/adapters/postgres"
+	usecase2 "github.com/irvaniamirali/serve-service/internal/domains/deployments/usecase"
 	githubclient "github.com/irvaniamirali/serve-service/internal/github"
-	"github.com/irvaniamirali/serve-service/internal/platform/httpx"
+	"github.com/irvaniamirali/serve-service/internal/infrastructure/httpx"
 	"gorm.io/gorm"
 )
 
@@ -37,18 +37,18 @@ func NewServer(db *gorm.DB) *fiber.App {
 		db,
 	)
 	applicationHTTPHandler := applicationcontroller.NewHandler(
-		applicationusecase.NewCreateApplication(applicationRepository),
-		applicationusecase.NewGetApplicationByID(applicationRepository),
-		applicationusecase.NewListApplications(applicationRepository),
+		usecase.NewCreateApplication(applicationRepository),
+		usecase.NewGetApplicationByID(applicationRepository),
+		usecase.NewListApplications(applicationRepository),
 	)
 	deploymentHTTPHandler := deploymentcontroller.NewHandler(
-		deploymentusecase.NewCreateDeployment(
+		usecase2.NewCreateDeployment(
 			deploymentRepository,
 			applicationRepository,
 			githubclient.NewClient(os.Getenv("GITHUB_TOKEN")),
 		),
-		deploymentusecase.NewGetDeploymentByID(deploymentRepository),
-		deploymentusecase.NewListDeploymentsByApplication(deploymentRepository, applicationRepository),
+		usecase2.NewGetDeploymentByID(deploymentRepository),
+		usecase2.NewListDeploymentsByApplication(deploymentRepository, applicationRepository),
 	)
 
 	return newServer(applicationHTTPHandler, deploymentHTTPHandler)

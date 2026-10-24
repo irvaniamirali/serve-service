@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/irvaniamirali/serve-service/internal/platform/config"
-	"github.com/irvaniamirali/serve-service/internal/platform/database"
+	"github.com/irvaniamirali/serve-service/internal/infrastructure/config"
+	"github.com/irvaniamirali/serve-service/internal/infrastructure/database"
 	"github.com/joho/godotenv"
 )
 

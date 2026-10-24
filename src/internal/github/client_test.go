@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/irvaniamirali/serve-service/internal/applications"
+	"github.com/irvaniamirali/serve-service/internal/domains/applications"
 )
 
 func TestResolveDefaultBranchHeadUsesGitHubMetadataAndNonMainDefaultBranch(t *testing.T) {

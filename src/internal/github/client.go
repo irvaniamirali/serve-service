@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irvaniamirali/serve-service/internal/applications"
+	"github.com/irvaniamirali/serve-service/internal/domains/applications"
 )
 
 const (

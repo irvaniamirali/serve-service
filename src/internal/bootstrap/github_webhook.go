@@ -8,11 +8,11 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	applicationdomain "github.com/irvaniamirali/serve-service/internal/applications"
-	applicationports "github.com/irvaniamirali/serve-service/internal/applications/ports"
-	deploymentports "github.com/irvaniamirali/serve-service/internal/deployments/ports"
+	applicationdomain "github.com/irvaniamirali/serve-service/internal/domains/applications"
+	applicationports "github.com/irvaniamirali/serve-service/internal/domains/applications/ports"
+	deploymentports "github.com/irvaniamirali/serve-service/internal/domains/deployments/ports"
 	githubpkg "github.com/irvaniamirali/serve-service/internal/github"
-	"github.com/irvaniamirali/serve-service/internal/platform/httpx"
+	"github.com/irvaniamirali/serve-service/internal/infrastructure/httpx"
 	"gorm.io/gorm"
 )
 

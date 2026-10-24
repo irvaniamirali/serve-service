@@ -14,12 +14,12 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	applicationdomain "github.com/irvaniamirali/serve-service/internal/applications"
-	applicationhandler "github.com/irvaniamirali/serve-service/internal/applications/adapters/http/controllers"
-	"github.com/irvaniamirali/serve-service/internal/applications/usecase"
-	deploymentdomain "github.com/irvaniamirali/serve-service/internal/deployments"
-	deploymenthandler "github.com/irvaniamirali/serve-service/internal/deployments/adapters/http/controllers"
-	deploymentusecase "github.com/irvaniamirali/serve-service/internal/deployments/usecase"
+	"github.com/irvaniamirali/serve-service/internal/domains/applications"
+	applicationhandler "github.com/irvaniamirali/serve-service/internal/domains/applications/adapters/http/controllers"
+	usecase2 "github.com/irvaniamirali/serve-service/internal/domains/applications/usecase"
+	deploymentdomain "github.com/irvaniamirali/serve-service/internal/domains/deployments"
+	deploymenthandler "github.com/irvaniamirali/serve-service/internal/domains/deployments/adapters/http/controllers"
+	usecase3 "github.com/irvaniamirali/serve-service/internal/domains/deployments/usecase"
 )
 
 func TestHealthEndpoint(t *testing.T) {
@@ -61,7 +61,7 @@ func TestApplicationAndDeploymentEndpoints(t *testing.T) {
 	if response.StatusCode != fiber.StatusCreated {
 		t.Fatalf("create application status = %d, want %d", response.StatusCode, fiber.StatusCreated)
 	}
-	var application applicationdomain.Application
+	var application applications.Application
 	decodeResponse(t, response, &application)
 	if application.ID != 1 || application.Name != "demo" || application.Branch != "main" {
 		t.Fatalf("unexpected application response: %+v", application)
@@ -71,9 +71,9 @@ func TestApplicationAndDeploymentEndpoints(t *testing.T) {
 		t.Fatalf("list applications status = %d, want %d", response.StatusCode, fiber.StatusOK)
 	}
 	var applicationList struct {
-		Applications []applicationdomain.Application `json:"applications"`
-		Limit        int                             `json:"limit"`
-		Offset       int                             `json:"offset"`
+		Applications []applications.Application `json:"applications"`
+		Limit        int                        `json:"limit"`
+		Offset       int                        `json:"offset"`
 	}
 	decodeResponse(t, response, &applicationList)
 	if len(applicationList.Applications) != 1 || applicationList.Applications[0].ID != application.ID ||
@@ -281,7 +281,7 @@ func TestGitHubWebhookPushCreatesDeployment(t *testing.T) {
 	applicationRepository := &httpApplicationRepository{}
 	deploymentRepository := &httpDeploymentRepository{}
 	ghRepositoryID := int64(42)
-	applicationRepository.applicationsByID = map[int64]applicationdomain.Application{
+	applicationRepository.applicationsByID = map[int64]applications.Application{
 		1: {
 			ID:                 1,
 			Name:               "demo",
@@ -362,19 +362,19 @@ func newTestServer(applicationRepository *httpApplicationRepository, deploymentR
 func newTestServerWithResolver(
 	applicationRepository *httpApplicationRepository,
 	deploymentRepository *httpDeploymentRepository,
-	commitResolver deploymentusecase.DefaultCommitResolver,
+	commitResolver usecase3.DefaultCommitResolver,
 ) *fiber.App {
 	setGitHubWebhookProcessor(applicationRepository, deploymentRepository, "test-secret", nil)
-	createApplication := usecase.NewCreateApplication(applicationRepository)
-	getApplicationByID := usecase.NewGetApplicationByID(applicationRepository)
-	listApplications := usecase.NewListApplications(applicationRepository)
-	createDeployment := deploymentusecase.NewCreateDeployment(
+	createApplication := usecase2.NewCreateApplication(applicationRepository)
+	getApplicationByID := usecase2.NewGetApplicationByID(applicationRepository)
+	listApplications := usecase2.NewListApplications(applicationRepository)
+	createDeployment := usecase3.NewCreateDeployment(
 		deploymentRepository,
 		applicationRepository,
 		commitResolver,
 	)
-	getDeploymentByID := deploymentusecase.NewGetDeploymentByID(deploymentRepository)
-	listDeploymentsByApplication := deploymentusecase.NewListDeploymentsByApplication(
+	getDeploymentByID := usecase3.NewGetDeploymentByID(deploymentRepository)
+	listDeploymentsByApplication := usecase3.NewListDeploymentsByApplication(
 		deploymentRepository,
 		applicationRepository,
 	)
@@ -395,7 +395,7 @@ type defaultCommitResolverFake struct {
 
 func (resolver defaultCommitResolverFake) ResolveDefaultBranchHead(
 	context.Context,
-	applicationdomain.Application,
+	applications.Application,
 ) (string, error) {
 	return resolver.sha, resolver.err
 }
@@ -436,17 +436,17 @@ func signHMAC(secret, payload string) string {
 }
 
 type httpApplicationRepository struct {
-	applicationsByID map[int64]applicationdomain.Application
+	applicationsByID map[int64]applications.Application
 	nextID           int64
 }
 
-func (repository *httpApplicationRepository) CreateApplication(_ context.Context, application applicationdomain.Application) (applicationdomain.Application, error) {
+func (repository *httpApplicationRepository) CreateApplication(_ context.Context, application applications.Application) (applications.Application, error) {
 	if repository.applicationsByID == nil {
-		repository.applicationsByID = make(map[int64]applicationdomain.Application)
+		repository.applicationsByID = make(map[int64]applications.Application)
 	}
 	for _, existing := range repository.applicationsByID {
 		if existing.Name == application.Name {
-			return applicationdomain.Application{}, applicationdomain.ErrConflict
+			return applications.Application{}, applications.ErrConflict
 		}
 	}
 	repository.nextID++
@@ -457,30 +457,30 @@ func (repository *httpApplicationRepository) CreateApplication(_ context.Context
 	return application, nil
 }
 
-func (repository *httpApplicationRepository) GetApplicationByID(_ context.Context, id int64) (applicationdomain.Application, error) {
+func (repository *httpApplicationRepository) GetApplicationByID(_ context.Context, id int64) (applications.Application, error) {
 	application, exists := repository.applicationsByID[id]
 	if !exists {
-		return applicationdomain.Application{}, applicationdomain.ErrNotFound
+		return applications.Application{}, applications.ErrNotFound
 	}
 	return application, nil
 }
 
-func (repository *httpApplicationRepository) GetApplicationByGitHubRepositoryID(_ context.Context, githubRepositoryID int64) (applicationdomain.Application, error) {
+func (repository *httpApplicationRepository) GetApplicationByGitHubRepositoryID(_ context.Context, githubRepositoryID int64) (applications.Application, error) {
 	for _, application := range repository.applicationsByID {
 		if application.GitHubRepositoryID != nil && *application.GitHubRepositoryID == githubRepositoryID {
 			return application, nil
 		}
 	}
-	return applicationdomain.Application{}, applicationdomain.ErrNotFound
+	return applications.Application{}, applications.ErrNotFound
 }
 
-func (repository *httpApplicationRepository) ListApplications(_ context.Context, limit, offset int) ([]applicationdomain.Application, error) {
-	result := make([]applicationdomain.Application, 0, len(repository.applicationsByID))
+func (repository *httpApplicationRepository) ListApplications(_ context.Context, limit, offset int) ([]applications.Application, error) {
+	result := make([]applications.Application, 0, len(repository.applicationsByID))
 	for _, application := range repository.applicationsByID {
 		result = append(result, application)
 	}
 	if offset >= len(result) {
-		return []applicationdomain.Application{}, nil
+		return []applications.Application{}, nil
 	}
 	result = result[offset:]
 	if limit < len(result) {

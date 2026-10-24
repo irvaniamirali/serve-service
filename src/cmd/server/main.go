@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/irvaniamirali/serve-service/internal/bootstrap"
-	"github.com/irvaniamirali/serve-service/internal/platform/config"
-	"github.com/irvaniamirali/serve-service/internal/platform/database"
-	"github.com/irvaniamirali/serve-service/internal/platform/logging"
+	"github.com/irvaniamirali/serve-service/internal/infrastructure/config"
+	"github.com/irvaniamirali/serve-service/internal/infrastructure/database"
+	"github.com/irvaniamirali/serve-service/internal/infrastructure/logging"
 	"github.com/joho/godotenv"
 )
 

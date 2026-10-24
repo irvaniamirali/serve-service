@@ -4,10 +4,10 @@ import (
 	"context"
 	"log/slog"
 
-	applicationpostgres "github.com/irvaniamirali/serve-service/internal/applications/adapters/postgres"
-	localbuilder "github.com/irvaniamirali/serve-service/internal/builds/adapters/local"
-	buildusecase "github.com/irvaniamirali/serve-service/internal/builds/usecase"
-	deploymentpostgres "github.com/irvaniamirali/serve-service/internal/deployments/adapters/postgres"
+	applicationpostgres "github.com/irvaniamirali/serve-service/internal/domains/applications/adapters/postgres"
+	localbuilder "github.com/irvaniamirali/serve-service/internal/domains/builds/adapters/local"
+	buildusecase "github.com/irvaniamirali/serve-service/internal/domains/builds/usecase"
+	deploymentpostgres "github.com/irvaniamirali/serve-service/internal/domains/deployments/adapters/postgres"
 	"gorm.io/gorm"
 )
 
