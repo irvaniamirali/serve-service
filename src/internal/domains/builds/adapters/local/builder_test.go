@@ -193,7 +193,8 @@ func TestBuildReportsDockerUnavailable(t *testing.T) {
 	directory := t.TempDir()
 	workspacePath := filepath.Join(directory, "workspace-path")
 	writeFakeGit(t, directory, workspacePath, fixtureCommitSHA, true, "", false)
-	t.Setenv("PATH", directory+":/bin")
+	//t.Setenv("PATH", directory+":/bin")
+	t.Setenv("PATH", directory)
 
 	_, err := NewBuilder().Build(context.Background(), testApplication(), fixtureCommitSHA)
 	if err == nil || !strings.Contains(err.Error(), "docker") {
