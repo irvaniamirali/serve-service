@@ -2,7 +2,7 @@
 
 ## Project Goal
 
-project-name is a learning-driven Git-to-deployment system. It connects a GitHub repository to an automated workflow that builds an application, runs it on a Linux host, and exposes it over HTTP.
+Serve Service is a learning-driven Git-to-deployment system. It connects a GitHub repository to an automated workflow that builds an application, runs it on a Linux host, and exposes it over HTTP.
 
 The primary goal is to learn DevOps and system architecture by building and operating a realistic system. This is not initially a commercial product, but its features and engineering practices should be real.
 
@@ -19,9 +19,9 @@ The primary goal is to learn DevOps and system architecture by building and oper
 
 | ID | Milestone | Main outcome | Depends on | Status |
 |---|---|---|---|---|
-| M00 | [Project Definition](docs/milestones/M00-project-definition.md) | Scope, requirements, initial architecture, and engineering conventions are documented. | — | Planned |
-| M01 | [Development Foundation](docs/milestones/M01-development-foundation.md) | A reproducible local development environment and tested project skeleton. | M00 | Planned |
-| M02 | [Core API](docs/milestones/M02-core-api.md) | Applications and deployments can be managed through a persistent API. | M01 | Planned |
+| M00 | [Project Definition](docs/milestones/M00-project-definition.md) | Scope, requirements, initial architecture, and engineering conventions are documented. | — | Implemented |
+| M01 | [Development Foundation](docs/milestones/M01-development-foundation.md) | A reproducible local development environment and tested project skeleton. | M00 | Implemented |
+| M02 | [Core API](docs/milestones/M02-core-api.md) | Applications and deployments can be managed through a persistent API. | M01 | Implemented |
 | M03 | [GitHub Integration](docs/milestones/M03-github-integration.md) | Verified GitHub push events can safely request deployments. | M02 | Planned |
 | M04 | [Build Engine](docs/milestones/M04-build-engine.md) | A specific repository commit can be built into a container image. | M03 | Planned |
 | M05 | [Deployment Runtime](docs/milestones/M05-deployment-runtime.md) | Built applications can run on the host and be reached over HTTP. | M04 | Planned |
@@ -34,4 +34,4 @@ The roadmap is intentionally limited to the first six milestones. Later work—s
 
 ## Current Focus
 
-Start with M00. Do not treat proposed technologies or architectural choices as final until they have been reviewed and recorded in the relevant documentation or ADR.
+The M02 core API is implemented and verified with unit, HTTP, PostgreSQL integration, formatting, and vet checks. Complete the unavailable linter check when `golangci-lint` is installed, then proceed to M03. Proposed later technologies remain subject to review and ADRs.

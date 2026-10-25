@@ -1,17 +1,14 @@
-# Project name
+# Serve Service
 
-project-name is a learning-driven Git-to-deployment system designed to deepen practical understanding of DevOps and system architecture.
+Serve Service is a learning-driven Git-to-deployment system designed to deepen practical understanding of DevOps and system architecture.
 
 The initial goal is to connect a GitHub repository to a workflow that builds an application, runs it on a Linux host, and exposes it over HTTP.
 
 This project prioritizes real functionality, operational reliability, security, testing, and clear technical documentation over commercial launch goals.
 
-## Project Status
-
-Planning. Implementation begins after the initial scope, requirements, technology stack, and architecture are reviewed.
-
 ## Documentation
 
+- [Architecture](docs/architecture.md)
 - [Roadmap](docs/roadmap.md)
 - [Project Definition — M00](docs/milestones/M00-project-definition.md)
 - [Development Foundation — M01](docs/milestones/M01-development-foundation.md)
@@ -22,4 +19,4 @@ Planning. Implementation begins after the initial scope, requirements, technolog
 
 ## Guiding Principle
 
-Every milestone must have testable acceptance criteria and updated documentation. See `ROADMAP.md` for the current plan.
+Every milestone must have testable acceptance criteria and updated documentation. See [the roadmap](docs/roadmap.md) for the current plan.

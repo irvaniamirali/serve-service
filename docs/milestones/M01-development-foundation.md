@@ -15,12 +15,14 @@ Create a reproducible development environment and a maintainable project skeleto
 
 - [ ] Create the initial repository layout.
 - [ ] Add a Go backend skeleton.
-- [ ] Add a React and TypeScript frontend skeleton.
-- [ ] Add Docker Compose for required local dependencies.
-- [ ] Configure PostgreSQL and a database migration approach, if confirmed by M00.
+
+[//]: # (- [ ] Add a React and TypeScript frontend skeleton.)
+[//]: # (- [ ] Add Docker Compose for required local dependencies.)
+[//]: # (- [ ] Configure PostgreSQL and a database migration approach, if confirmed by M00.)
 - [ ] Implement configuration loading and validation.
 - [ ] Add structured application logging.
-- [ ] Add liveness and readiness endpoints.
+
+[//]: # (- [ ] Add liveness and readiness endpoints.)
 - [ ] Add formatting, linting, and automated test commands.
 - [ ] Add CI checks for proposed changes.
 - [ ] Document setup, common commands, and troubleshooting.
