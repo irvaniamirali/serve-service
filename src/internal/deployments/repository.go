@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irvaniamirali/serve-service/internal/domains/applications"
+	"github.com/irvaniamirali/serve-service/internal/applications"
 	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -33,22 +33,25 @@ func (deploymentModel) TableName() string {
 	return "deployments"
 }
 
-// Repository persists deployments using the shared GORM database handle.
-type Repository struct {
+// DeploymentRepository persists deployments using the shared GORM database handle.
+type DeploymentRepository struct {
 	db *gorm.DB
 }
+
+var _ DeploymentRepositoryInterface = (*DeploymentRepository)(nil)
 
 const (
 	buildQueueAdvisoryLock int64 = 0x535256434255494c
 	staleBuildThreshold          = 30 * time.Minute
 )
 
-func NewRepository(db *gorm.DB) *Repository {
-	return &Repository{db: db}
+// NewDeploymentRepository creates a deployment repository backed by PostgreSQL.
+func NewDeploymentRepository(db *gorm.DB) *DeploymentRepository {
+	return &DeploymentRepository{db: db}
 }
 
 // ClaimNextQueued atomically moves one queued deployment into building state.
-func (repository *Repository) ClaimNextQueued(ctx context.Context) (Deployment, error) {
+func (repository *DeploymentRepository) ClaimNextQueued(ctx context.Context) (Deployment, error) {
 	var claimed Deployment
 	noQueuedBuild := false
 	err := repository.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -139,7 +142,7 @@ func (repository *Repository) ClaimNextQueued(ctx context.Context) (Deployment, 
 }
 
 // RecordBuildResult persists a terminal build result only while the deployment is building.
-func (repository *Repository) RecordBuildResult(
+func (repository *DeploymentRepository) RecordBuildResult(
 	ctx context.Context,
 	id int64,
 	succeeded bool,
@@ -202,7 +205,7 @@ func truncateBuildLog(value string) string {
 	return strings.ToValidUTF8(value[len(value)-maxPersistedBuildLogBytes:], "\uFFFD")
 }
 
-func (repository *Repository) Create(
+func (repository *DeploymentRepository) Create(
 	ctx context.Context,
 	applicationID int64,
 	commitSHA *string,
@@ -229,7 +232,7 @@ func (repository *Repository) Create(
 	return toDeployment(record), nil
 }
 
-func (repository *Repository) GetByID(
+func (repository *DeploymentRepository) GetByID(
 	ctx context.Context,
 	id int64,
 ) (Deployment, error) {
@@ -245,7 +248,7 @@ func (repository *Repository) GetByID(
 	return toDeployment(record), nil
 }
 
-func (repository *Repository) ListByApplication(
+func (repository *DeploymentRepository) ListByApplication(
 	ctx context.Context,
 	applicationID int64,
 	limit int,
@@ -275,7 +278,7 @@ func (repository *Repository) ListByApplication(
 	return result, nil
 }
 
-func (repository *Repository) TransitionStatus(
+func (repository *DeploymentRepository) TransitionStatus(
 	ctx context.Context,
 	id int64,
 	expectedStatus string,

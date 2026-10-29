@@ -6,12 +6,12 @@ import (
 
 // GetApplicationByID handles retrieving an application by its identifier.
 type GetApplicationByID struct {
-	repository Repository
+	repository ApplicationRepositoryInterface
 }
 
 // NewGetApplicationByID creates the application retrieval use case.
 func NewGetApplicationByID(
-	repository Repository,
+	repository ApplicationRepositoryInterface,
 ) *GetApplicationByID {
 	return &GetApplicationByID{repository: repository}
 }

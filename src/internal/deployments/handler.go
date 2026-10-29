@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/irvaniamirali/serve-service/internal/domains/applications"
+	"github.com/irvaniamirali/serve-service/internal/applications"
 	"github.com/irvaniamirali/serve-service/internal/infrastructure/httpx"
 )
 
@@ -37,17 +37,17 @@ func (handler *Handler) RegisterRoutes(router fiber.Router) {
 	router.Get("/deployments/:id/logs", handler.getBuildLog)
 }
 
-type createRequest struct {
+type CreateDeploymentRequest struct {
 	CommitSHA string `json:"commit_sha"`
 }
 
-type listResponse struct {
+type ListDeploymentsResponse struct {
 	Deployments []Deployment `json:"deployments"`
 	Limit       int          `json:"limit"`
 	Offset      int          `json:"offset"`
 }
 
-type buildLogResponse struct {
+type BuildLogResponse struct {
 	DeploymentID int64  `json:"deployment_id"`
 	Log          string `json:"log"`
 }
@@ -63,7 +63,7 @@ func (handler *Handler) create(ctx *fiber.Ctx) error {
 		)
 	}
 
-	var request createRequest
+	var request CreateDeploymentRequest
 
 	if len(ctx.Body()) > 0 {
 		if err := httpx.DecodeJSON(ctx, &request); err != nil {
@@ -163,7 +163,7 @@ func (handler *Handler) getBuildLog(ctx *fiber.Ctx) error {
 		buildLog = *deployment.BuildLog
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(buildLogResponse{
+	return ctx.Status(fiber.StatusOK).JSON(BuildLogResponse{
 		DeploymentID: deployment.ID,
 		Log:          buildLog,
 	})
@@ -222,7 +222,7 @@ func (handler *Handler) listByApplication(ctx *fiber.Ctx) error {
 		return httpx.WriteInternalError(ctx, err)
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(listResponse{
+	return ctx.Status(fiber.StatusOK).JSON(ListDeploymentsResponse{
 		Deployments: deploymentList,
 		Limit:       limit,
 		Offset:      offset,

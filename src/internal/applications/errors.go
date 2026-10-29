@@ -9,6 +9,6 @@ var (
 	// ErrNotFound indicates that the requested application does not exist.
 	ErrNotFound = errors.New("application not found")
 
-	// ErrConflict indicates that an application with the same name exists.
-	ErrConflict = errors.New("application name already exists")
+	// ErrConflict indicates that an application registration already exists.
+	ErrConflict = errors.New("application registration already exists")
 )

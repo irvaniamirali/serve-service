@@ -36,7 +36,7 @@ func (handler *Handler) RegisterRoutes(router fiber.Router) {
 }
 
 func (handler *Handler) create(ctx *fiber.Ctx) error {
-	var request createRequest
+	var request CreateApplicationRequest
 
 	if err := httpx.DecodeJSON(ctx, &request); err != nil {
 		return httpx.WriteError(
@@ -49,7 +49,7 @@ func (handler *Handler) create(ctx *fiber.Ctx) error {
 
 	application, err := handler.createApplication.Execute(
 		ctx.UserContext(),
-		CreateApplicationInput{
+		CreateApplicationParams{
 			Name:               request.Name,
 			RepositoryURL:      request.RepositoryURL,
 			Branch:             request.Branch,
@@ -68,8 +68,8 @@ func (handler *Handler) create(ctx *fiber.Ctx) error {
 		return httpx.WriteError(
 			ctx,
 			fiber.StatusConflict,
-			"application_name_conflict",
-			"An application with this name already exists",
+			"application_conflict",
+			"An application with this name or GitHub repository is already registered",
 		)
 	}
 	if err != nil {
@@ -150,7 +150,7 @@ func (handler *Handler) list(ctx *fiber.Ctx) error {
 		return httpx.WriteInternalError(ctx, err)
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(listResponse{
+	return ctx.Status(fiber.StatusOK).JSON(ListApplicationsResponse{
 		Applications: applicationList,
 		Limit:        limit,
 		Offset:       offset,

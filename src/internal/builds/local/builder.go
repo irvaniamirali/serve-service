@@ -13,8 +13,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/irvaniamirali/serve-service/internal/domains/applications"
-	"github.com/irvaniamirali/serve-service/internal/domains/builds"
+	"github.com/irvaniamirali/serve-service/internal/applications"
+	"github.com/irvaniamirali/serve-service/internal/builds"
 	"github.com/irvaniamirali/serve-service/internal/github"
 )
 

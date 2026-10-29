@@ -6,10 +6,10 @@ import (
 
 // GetDeploymentByID retrieves a deployment by its identifier.
 type GetDeploymentByID struct {
-	repository Repository
+	repository DeploymentRepositoryInterface
 }
 
-func NewGetDeploymentByID(repository Repository) *GetDeploymentByID {
+func NewGetDeploymentByID(repository DeploymentRepositoryInterface) *GetDeploymentByID {
 	return &GetDeploymentByID{repository: repository}
 }
 

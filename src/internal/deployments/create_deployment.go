@@ -5,19 +5,19 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/irvaniamirali/serve-service/internal/domains/applications"
+	"github.com/irvaniamirali/serve-service/internal/applications"
 	"github.com/irvaniamirali/serve-service/internal/github"
 )
 
 // CreateDeployment validates and persists a queued deployment request.
 type CreateDeployment struct {
-	repository        Repository
+	repository        DeploymentRepositoryInterface
 	applicationReader applicationReader
 	commitResolver    DefaultCommitResolver
 }
 
 func NewCreateDeployment(
-	repository Repository,
+	repository DeploymentRepositoryInterface,
 	applicationReader applicationReader,
 	commitResolver DefaultCommitResolver,
 ) *CreateDeployment {

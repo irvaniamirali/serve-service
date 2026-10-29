@@ -2,8 +2,8 @@ package applications
 
 import "strconv"
 
-// createRequest represents the JSON payload for creating an application.
-type createRequest struct {
+// CreateApplicationRequest is the JSON payload for creating an application.
+type CreateApplicationRequest struct {
 	Name               string `json:"name"`
 	RepositoryURL      string `json:"repository_url"`
 	Branch             string `json:"branch"`

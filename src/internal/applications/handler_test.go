@@ -53,14 +53,60 @@ func TestCreateApplicationAcceptsGitHubRepositoryID(t *testing.T) {
 	}
 }
 
+func TestCreateApplicationReturnsConflictForDuplicateRegistration(t *testing.T) {
+	repository := &applicationRepositoryFake{createErr: ErrConflict}
+	handler := NewHandler(
+		NewCreateApplication(repository),
+		NewGetApplicationByID(repository),
+		NewListApplications(repository),
+	)
+	app := fiber.New()
+	handler.RegisterRoutes(app)
+
+	request := httptest.NewRequest(
+		"POST",
+		"/applications",
+		strings.NewReader(`{
+			"name": "example",
+			"repository_url": "https://github.com/example/app.git",
+			"branch": "main"
+		}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("send create-application request: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != fiber.StatusConflict {
+		t.Fatalf("status = %d, want %d", response.StatusCode, fiber.StatusConflict)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode conflict response: %v", err)
+	}
+	if body.Error.Code != "application_conflict" {
+		t.Fatalf("error code = %q, want application_conflict", body.Error.Code)
+	}
+}
+
 type applicationRepositoryFake struct {
-	created Application
+	created   Application
+	createErr error
 }
 
 func (repository *applicationRepositoryFake) CreateApplication(
 	_ context.Context,
 	application Application,
 ) (Application, error) {
+	if repository.createErr != nil {
+		return Application{}, repository.createErr
+	}
 	application.ID = 1
 	repository.created = application
 	return application, nil

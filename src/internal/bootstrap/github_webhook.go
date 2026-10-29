@@ -3,35 +3,32 @@ package bootstrap
 import (
 	"context"
 	"errors"
-	"log/slog"
+	"fmt"
 	"os"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	applicationdomain "github.com/irvaniamirali/serve-service/internal/domains/applications"
-	applicationports "github.com/irvaniamirali/serve-service/internal/domains/applications/ports"
-	deploymentports "github.com/irvaniamirali/serve-service/internal/domains/deployments/ports"
+	"github.com/irvaniamirali/serve-service/internal/applications"
+	"github.com/irvaniamirali/serve-service/internal/deployments"
 	githubpkg "github.com/irvaniamirali/serve-service/internal/github"
 	"github.com/irvaniamirali/serve-service/internal/infrastructure/httpx"
 	"gorm.io/gorm"
 )
 
-var githubWebhookProcessor *GitHubWebhookProcessor
-
 type GitHubWebhookProcessor struct {
-	applicationRepository applicationports.Repository
-	deploymentRepository  deploymentports.Repository
+	applicationRepository applications.ApplicationRepositoryInterface
+	deploymentRepository  deployments.DeploymentRepositoryInterface
 	secret                string
 	db                    *gorm.DB
 }
 
-func setGitHubWebhookProcessor(
-	applicationRepository applicationports.Repository,
-	deploymentRepository deploymentports.Repository,
+func newGitHubWebhookProcessor(
+	applicationRepository applications.ApplicationRepositoryInterface,
+	deploymentRepository deployments.DeploymentRepositoryInterface,
 	secret string,
 	db *gorm.DB,
-) {
-	githubWebhookProcessor = &GitHubWebhookProcessor{
+) *GitHubWebhookProcessor {
+	return &GitHubWebhookProcessor{
 		applicationRepository: applicationRepository,
 		deploymentRepository:  deploymentRepository,
 		secret:                secret,
@@ -39,12 +36,9 @@ func setGitHubWebhookProcessor(
 	}
 }
 
-func registerGitHubWebhookRoute(app *fiber.App) {
-	if githubWebhookProcessor == nil {
-		return
-	}
-	app.Post("/api/v1/webhooks/github", githubWebhookProcessor.handle)
-	app.Post("/api/v1/github/webhooks", githubWebhookProcessor.handle)
+func (processor *GitHubWebhookProcessor) registerRoutes(app *fiber.App) {
+	app.Post("/api/v1/webhooks/github", processor.handle)
+	app.Post("/api/v1/github/webhooks", processor.handle)
 }
 
 func (processor *GitHubWebhookProcessor) handle(ctx *fiber.Ctx) error {
@@ -84,47 +78,163 @@ func (processor *GitHubWebhookProcessor) handle(ctx *fiber.Ctx) error {
 		}
 	}
 	if eventType != "push" {
-		_ = processor.updateDeliveryOutcome(ctx.UserContext(), deliveryID, eventType, 0, 0, "ignored", nil, "event type ignored")
+		if err := processor.recordDeliveryOutcome(
+			ctx.UserContext(),
+			deliveryID,
+			eventType,
+			0,
+			0,
+			"ignored",
+			nil,
+			"event type ignored",
+		); err != nil {
+			return httpx.WriteInternalError(ctx, err)
+		}
 		return ctx.Status(fiber.StatusAccepted).JSON(fiber.Map{"status": "ignored", "event_type": eventType})
 	}
 
 	event, err := githubpkg.ParsePushEvent(body)
 	if err != nil {
-		_ = processor.updateDeliveryOutcome(ctx.UserContext(), deliveryID, eventType, 0, 0, "failed", nil, err.Error())
+		if outcomeErr := processor.recordDeliveryOutcome(
+			ctx.UserContext(),
+			deliveryID,
+			eventType,
+			0,
+			0,
+			"failed",
+			nil,
+			err.Error(),
+		); outcomeErr != nil {
+			return httpx.WriteInternalError(ctx, errors.Join(err, outcomeErr))
+		}
 		return httpx.WriteError(ctx, fiber.StatusBadRequest, "invalid_payload", "Malformed GitHub push payload")
 	}
 	if !githubpkg.IsDeployableCommitSHA(event.After) {
-		_ = processor.updateDeliveryOutcome(ctx.UserContext(), deliveryID, eventType, 0, 0, "failed", nil, "missing or invalid commit SHA")
+		if err := processor.recordDeliveryOutcome(
+			ctx.UserContext(),
+			deliveryID,
+			eventType,
+			0,
+			0,
+			"failed",
+			nil,
+			"missing or invalid commit SHA",
+		); err != nil {
+			return httpx.WriteInternalError(ctx, err)
+		}
 		return httpx.WriteError(ctx, fiber.StatusBadRequest, "invalid_payload", "Push payload must contain a valid commit SHA")
 	}
 	if !strings.HasPrefix(event.Ref, "refs/heads/") {
-		_ = processor.updateDeliveryOutcome(ctx.UserContext(), deliveryID, eventType, 0, 0, "ignored", nil, "branch deletion or non-branch ref")
+		if err := processor.recordDeliveryOutcome(
+			ctx.UserContext(),
+			deliveryID,
+			eventType,
+			0,
+			0,
+			"ignored",
+			nil,
+			"branch deletion or non-branch ref",
+		); err != nil {
+			return httpx.WriteInternalError(ctx, err)
+		}
 		return ctx.Status(fiber.StatusAccepted).JSON(fiber.Map{"status": "ignored", "event_type": eventType, "ref": event.Ref})
 	}
 
 	application, err := processor.applicationRepository.GetApplicationByGitHubRepositoryID(ctx.UserContext(), event.Repository.ID)
 	if err != nil {
-		if errors.Is(err, applicationdomain.ErrNotFound) {
-			_ = processor.updateDeliveryOutcome(ctx.UserContext(), deliveryID, eventType, 0, 0, "ignored", nil, "unknown repository")
+		if errors.Is(err, applications.ErrNotFound) {
+			if outcomeErr := processor.recordDeliveryOutcome(
+				ctx.UserContext(),
+				deliveryID,
+				eventType,
+				0,
+				0,
+				"ignored",
+				nil,
+				"unknown repository",
+			); outcomeErr != nil {
+				return httpx.WriteInternalError(ctx, outcomeErr)
+			}
 			return ctx.Status(fiber.StatusAccepted).JSON(fiber.Map{"status": "ignored", "event_type": eventType})
 		}
-		_ = processor.updateDeliveryOutcome(ctx.UserContext(), deliveryID, eventType, 0, 0, "failed", nil, err.Error())
+		if outcomeErr := processor.recordDeliveryOutcome(
+			ctx.UserContext(),
+			deliveryID,
+			eventType,
+			0,
+			0,
+			"failed",
+			nil,
+			err.Error(),
+		); outcomeErr != nil {
+			err = errors.Join(err, outcomeErr)
+		}
 		return httpx.WriteInternalError(ctx, err)
 	}
 	if !githubpkg.MatchesConfiguredBranch(application.Branch, event.Ref) {
-		_ = processor.updateDeliveryOutcome(ctx.UserContext(), deliveryID, eventType, application.ID, 0, "ignored", nil, "branch does not match configured deployment branch")
+		if err := processor.recordDeliveryOutcome(
+			ctx.UserContext(),
+			deliveryID,
+			eventType,
+			application.ID,
+			0,
+			"ignored",
+			nil,
+			"branch does not match configured deployment branch",
+		); err != nil {
+			return httpx.WriteInternalError(ctx, err)
+		}
 		return ctx.Status(fiber.StatusAccepted).JSON(fiber.Map{"status": "ignored", "branch": event.Ref})
 	}
 
 	deployment, err := processor.deploymentRepository.Create(ctx.UserContext(), application.ID, &event.After)
 	if err != nil {
-		_ = processor.updateDeliveryOutcome(ctx.UserContext(), deliveryID, eventType, application.ID, 0, "failed", nil, err.Error())
+		if outcomeErr := processor.recordDeliveryOutcome(
+			ctx.UserContext(),
+			deliveryID,
+			eventType,
+			application.ID,
+			0,
+			"failed",
+			nil,
+			err.Error(),
+		); outcomeErr != nil {
+			err = errors.Join(err, outcomeErr)
+		}
 		return httpx.WriteInternalError(ctx, err)
 	}
 	if err := processor.updateDeliveryOutcome(ctx.UserContext(), deliveryID, eventType, application.ID, deployment.ID, "processed", &deployment.ID, ""); err != nil {
-		slog.Error("record processed delivery", "delivery_id", deliveryID, "error", err)
+		return httpx.WriteInternalError(
+			ctx,
+			fmt.Errorf("record processed GitHub delivery %q: %w", deliveryID, err),
+		)
 	}
 	return ctx.Status(fiber.StatusAccepted).JSON(fiber.Map{"status": "processed", "deployment_id": deployment.ID, "commit_sha": event.After})
+}
+
+func (processor *GitHubWebhookProcessor) recordDeliveryOutcome(
+	ctx context.Context,
+	deliveryID string,
+	eventType string,
+	applicationID int64,
+	deploymentID int64,
+	outcome string,
+	deploymentRef *int64,
+	failureReason string,
+) error {
+	if err := processor.updateDeliveryOutcome(
+		ctx,
+		deliveryID,
+		eventType,
+		applicationID,
+		deploymentID,
+		outcome,
+		deploymentRef,
+		failureReason,
+	); err != nil {
+		return fmt.Errorf("record GitHub delivery %q outcome %q: %w", deliveryID, outcome, err)
+	}
+	return nil
 }
 
 func webhookSecretFromEnvironment() string {
@@ -196,6 +306,9 @@ func (processor *GitHubWebhookProcessor) updateDeliveryOutcome(
 	)
 	if result.Error != nil {
 		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return fmt.Errorf("GitHub delivery %q was not found while updating its outcome", deliveryID)
 	}
 	return nil
 }

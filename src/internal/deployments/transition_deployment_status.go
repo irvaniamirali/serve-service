@@ -11,11 +11,11 @@ const maxFailureMessageSize = 2000
 
 // TransitionDeploymentStatus validates and persists a lifecycle transition.
 type TransitionDeploymentStatus struct {
-	repository Repository
+	repository DeploymentRepositoryInterface
 }
 
 func NewTransitionDeploymentStatus(
-	repository Repository,
+	repository DeploymentRepositoryInterface,
 ) *TransitionDeploymentStatus {
 	return &TransitionDeploymentStatus{repository: repository}
 }

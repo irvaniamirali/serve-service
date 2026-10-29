@@ -26,18 +26,20 @@ func (applicationModel) TableName() string {
 	return "applications"
 }
 
-// Repository persists applications using the shared GORM database handle.
-type Repository struct {
+// ApplicationRepository persists applications using the shared GORM database handle.
+type ApplicationRepository struct {
 	db *gorm.DB
 }
 
-// NewRepository creates a repository backed by the provided database connection.
-func NewRepository(db *gorm.DB) *Repository {
-	return &Repository{db: db}
+var _ ApplicationRepositoryInterface = (*ApplicationRepository)(nil)
+
+// NewApplicationRepository creates an application repository backed by PostgreSQL.
+func NewApplicationRepository(db *gorm.DB) *ApplicationRepository {
+	return &ApplicationRepository{db: db}
 }
 
 // CreateApplication persists a new application.
-func (repository *Repository) CreateApplication(
+func (repository *ApplicationRepository) CreateApplication(
 	ctx context.Context,
 	application Application,
 ) (Application, error) {
@@ -56,7 +58,7 @@ func (repository *Repository) CreateApplication(
 		if errors.As(err, &postgresError) &&
 			postgresError.Code == "23505" &&
 			(postgresError.ConstraintName == "applications_name_key" ||
-				postgresError.ConstraintName == "applications_github_repository_id_key") {
+				postgresError.ConstraintName == "idx_applications_github_repository_id_unique") {
 			return Application{}, ErrConflict
 		}
 
@@ -67,7 +69,7 @@ func (repository *Repository) CreateApplication(
 }
 
 // GetApplicationByID retrieves an application by its identifier.
-func (repository *Repository) GetApplicationByID(
+func (repository *ApplicationRepository) GetApplicationByID(
 	ctx context.Context,
 	applicationID int64,
 ) (Application, error) {
@@ -90,7 +92,7 @@ func (repository *Repository) GetApplicationByID(
 }
 
 // GetApplicationByGitHubRepositoryID retrieves an application by its GitHub repository ID.
-func (repository *Repository) GetApplicationByGitHubRepositoryID(
+func (repository *ApplicationRepository) GetApplicationByGitHubRepositoryID(
 	ctx context.Context,
 	githubRepositoryID int64,
 ) (Application, error) {
@@ -115,7 +117,7 @@ func (repository *Repository) GetApplicationByGitHubRepositoryID(
 }
 
 // ListApplications returns a stable newest-first page of registered applications.
-func (repository *Repository) ListApplications(
+func (repository *ApplicationRepository) ListApplications(
 	ctx context.Context,
 	limit int,
 	offset int,

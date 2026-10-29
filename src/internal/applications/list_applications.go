@@ -11,11 +11,11 @@ const (
 
 // ListApplications retrieves a page of registered applications.
 type ListApplications struct {
-	repository Repository
+	repository ApplicationRepositoryInterface
 }
 
 // NewListApplications creates the application listing use case.
-func NewListApplications(repository Repository) *ListApplications {
+func NewListApplications(repository ApplicationRepositoryInterface) *ListApplications {
 	return &ListApplications{repository: repository}
 }
 

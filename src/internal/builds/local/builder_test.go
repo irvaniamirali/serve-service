@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irvaniamirali/serve-service/internal/domains/applications"
+	"github.com/irvaniamirali/serve-service/internal/applications"
 )
 
 const fixtureCommitSHA = "0123456789abcdef0123456789abcdef01234567"

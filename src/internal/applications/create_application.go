@@ -15,12 +15,12 @@ type CreateApplicationParams struct {
 
 // CreateApplication handles the application creation use case.
 type CreateApplication struct {
-	repository Repository
+	repository ApplicationRepositoryInterface
 }
 
 // NewCreateApplication creates the application use case.
 func NewCreateApplication(
-	repository Repository,
+	repository ApplicationRepositoryInterface,
 ) *CreateApplication {
 	return &CreateApplication{repository: repository}
 }

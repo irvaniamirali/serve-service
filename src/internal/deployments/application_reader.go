@@ -3,7 +3,7 @@ package deployments
 import (
 	"context"
 
-	"github.com/irvaniamirali/serve-service/internal/domains/applications"
+	"github.com/irvaniamirali/serve-service/internal/applications"
 )
 
 type applicationReader interface {

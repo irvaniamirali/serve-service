@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/irvaniamirali/serve-service/internal/domains/applications"
-	"github.com/irvaniamirali/serve-service/internal/domains/deployments"
+	"github.com/irvaniamirali/serve-service/internal/applications"
+	"github.com/irvaniamirali/serve-service/internal/deployments"
 	"github.com/irvaniamirali/serve-service/internal/github"
 )
 
@@ -27,6 +27,10 @@ type BuildResult struct {
 	Log            string
 }
 
+type builder interface {
+	Build(context.Context, applications.Application, string) (BuildResult, error)
+}
+
 type buildQueue interface {
 	ClaimNextQueued(context.Context) (deployments.Deployment, error)
 	RecordBuildResult(
@@ -40,13 +44,13 @@ type buildQueue interface {
 	) (deployments.Deployment, error)
 }
 
-type builder interface {
-	Build(context.Context, applications.Application, string) (BuildResult, error)
+type applicationReader interface {
+	GetApplicationByID(context.Context, int64) (applications.Application, error)
 }
 
 type Worker struct {
 	deployments  buildQueue
-	applications applications.Repository
+	applications applicationReader
 	builder      builder
 	logger       *slog.Logger
 	pollInterval time.Duration
@@ -56,7 +60,7 @@ type Worker struct {
 // NewWorker wires the durable queue, application lookup, and image builder for background execution.
 func NewWorker(
 	deploymentRepository buildQueue,
-	applicationRepository applications.Repository,
+	applicationRepository applicationReader,
 	imageBuilder builder,
 	logger *slog.Logger,
 ) *Worker {

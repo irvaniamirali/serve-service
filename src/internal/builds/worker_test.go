@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irvaniamirali/serve-service/internal/domains/applications"
-	"github.com/irvaniamirali/serve-service/internal/domains/deployments"
+	"github.com/irvaniamirali/serve-service/internal/applications"
+	"github.com/irvaniamirali/serve-service/internal/deployments"
 )
 
 const testCommitSHA = "0123456789abcdef0123456789abcdef01234567"

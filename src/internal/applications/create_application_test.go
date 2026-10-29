@@ -46,8 +46,24 @@ func TestCreateApplicationRejectsInvalidInputWithoutPersistence(t *testing.T) {
 	}
 }
 
+func TestCreateApplicationPreservesPersistenceError(t *testing.T) {
+	persistenceError := errors.New("database unavailable")
+	repository := &createApplicationRepository{createErr: persistenceError}
+	create := NewCreateApplication(repository)
+
+	_, err := create.Execute(context.Background(), CreateApplicationParams{
+		Name:          "demo",
+		RepositoryURL: "https://github.com/acme/demo.git",
+		Branch:        "main",
+	})
+	if !errors.Is(err, persistenceError) {
+		t.Fatalf("Execute() error = %v, want persistence error", err)
+	}
+}
+
 type createApplicationRepository struct {
 	createCalls int
+	createErr   error
 }
 
 func (repository *createApplicationRepository) CreateApplication(
@@ -55,6 +71,9 @@ func (repository *createApplicationRepository) CreateApplication(
 	application Application,
 ) (Application, error) {
 	repository.createCalls++
+	if repository.createErr != nil {
+		return Application{}, repository.createErr
+	}
 	return application, nil
 }
 

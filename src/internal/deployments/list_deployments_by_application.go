@@ -6,12 +6,12 @@ import (
 
 // ListDeploymentsByApplication returns one page of an application's history.
 type ListDeploymentsByApplication struct {
-	repository        Repository
+	repository        DeploymentRepositoryInterface
 	applicationReader applicationReader
 }
 
 func NewListDeploymentsByApplication(
-	repository Repository,
+	repository DeploymentRepositoryInterface,
 	applicationReader applicationReader,
 ) *ListDeploymentsByApplication {
 	return &ListDeploymentsByApplication{
