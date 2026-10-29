@@ -45,14 +45,14 @@ Install Git and the Docker CLI, and make both available on `PATH`. Start a local
 
 Apply database migrations and start the service using the existing project targets:
 
-```sh
+```fish
 make migrate-up
 make run
 ```
 
 Create a deployment for the latest commit on the GitHub default branch:
 
-```sh
+```fish
 curl -X POST http://localhost:8000/api/v1/applications/1/deployments \
   -H 'Content-Type: application/json' \
   -d '{}'
@@ -60,7 +60,7 @@ curl -X POST http://localhost:8000/api/v1/applications/1/deployments \
 
 The `201` response contains the resolved `commit_sha`, which is also persisted before the worker claims the request. To select a specific commit instead, supply its full SHA:
 
-```sh
+```fish
 curl -X POST http://localhost:8000/api/v1/applications/1/deployments \
   -H 'Content-Type: application/json' \
   -d '{"commit_sha":"0123456789abcdef0123456789abcdef01234567"}'
@@ -80,11 +80,18 @@ The default worker timeout is 20 minutes. The service allows one active build gl
 
 Run the Go tests from `src`:
 
-```sh
+```fish
 go test ./...
 ```
 
-The local builder tests use controlled fake Git and Docker executables; the default test suite does not require a running Docker daemon. PostgreSQL queue-claim integration coverage is opt-in and exercises the actual locking, empty-queue, claim, and result-persistence behavior. Set `RUN_DATABASE_INTEGRATION_TESTS=1` and run `go test ./internal/platform/database -run '^TestPostgresBuildQueueClaiming$' -count=1 -v` from `src`; the configured test database must have no other queued or building deployments. It skips if the queue is not idle.
+The local builder tests use controlled fake Git and Docker executables; the default test suite does not require a running Docker daemon. PostgreSQL queue-claim integration coverage is opt-in and exercises the actual locking, empty-queue, claim, and result-persistence behavior. From `src`, enable it in Fish and run:
+
+```fish
+set -lx RUN_DATABASE_INTEGRATION_TESTS 1
+go test ./internal/infrastructure/database -run '^TestPostgresBuildQueueClaiming$' -count=1 -v
+```
+
+The configured test database must have no other queued or building deployments. The test skips if the queue is not idle.
 
 ## Credentials and security limitations
 

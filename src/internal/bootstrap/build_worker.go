@@ -4,18 +4,18 @@ import (
 	"context"
 	"log/slog"
 
-	applicationpostgres "github.com/irvaniamirali/serve-service/internal/domains/applications/adapters/postgres"
-	localbuilder "github.com/irvaniamirali/serve-service/internal/domains/builds/adapters/local"
-	buildusecase "github.com/irvaniamirali/serve-service/internal/domains/builds/usecase"
-	deploymentpostgres "github.com/irvaniamirali/serve-service/internal/domains/deployments/adapters/postgres"
+	"github.com/irvaniamirali/serve-service/internal/applications"
+	buildusecase "github.com/irvaniamirali/serve-service/internal/builds"
+	localbuilder "github.com/irvaniamirali/serve-service/internal/builds/local"
+	"github.com/irvaniamirali/serve-service/internal/deployments"
 	"gorm.io/gorm"
 )
 
 // StartBuildWorker runs the durable deployment builder until its context is canceled.
 func StartBuildWorker(ctx context.Context, db *gorm.DB, logger *slog.Logger) <-chan error {
 	worker := buildusecase.NewWorker(
-		deploymentpostgres.NewRepository(db),
-		applicationpostgres.NewRepository(db),
+		deployments.NewDeploymentRepository(db),
+		applications.NewApplicationRepository(db),
 		localbuilder.NewBuilder(),
 		logger,
 	)

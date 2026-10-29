@@ -10,12 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/irvaniamirali/serve-service/internal/domains/applications"
-	applicationpostgres "github.com/irvaniamirali/serve-service/internal/domains/applications/adapters/postgres"
-	usecase2 "github.com/irvaniamirali/serve-service/internal/domains/applications/usecase"
-	deploymentdomain "github.com/irvaniamirali/serve-service/internal/domains/deployments"
-	deploymentpostgres "github.com/irvaniamirali/serve-service/internal/domains/deployments/adapters/postgres"
-	usecase3 "github.com/irvaniamirali/serve-service/internal/domains/deployments/usecase"
+	"github.com/irvaniamirali/serve-service/internal/applications"
+	"github.com/irvaniamirali/serve-service/internal/deployments"
 	"github.com/irvaniamirali/serve-service/internal/infrastructure/config"
 	"github.com/irvaniamirali/serve-service/internal/infrastructure/database"
 )
@@ -44,28 +40,30 @@ func TestPostgresPersistenceAndMigrations(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	applicationRepository := applicationpostgres.NewRepository(db)
-	createApplication := usecase2.NewCreateApplication(applicationRepository)
-	deploymentRepository := deploymentpostgres.NewRepository(db)
-	createDeployment := usecase3.NewCreateDeployment(
+	applicationRepository := applications.NewApplicationRepository(db)
+	createApplication := applications.NewCreateApplication(applicationRepository)
+	deploymentRepository := deployments.NewDeploymentRepository(db)
+	createDeployment := deployments.NewCreateDeployment(
 		deploymentRepository,
 		applicationRepository,
 		databaseCommitResolverFake{},
 	)
-	listDeploymentsByApplication := usecase3.NewListDeploymentsByApplication(
+	listDeploymentsByApplication := deployments.NewListDeploymentsByApplication(
 		deploymentRepository,
 		applicationRepository,
 	)
-	transitionDeploymentStatus := usecase3.NewTransitionDeploymentStatus(
+	transitionDeploymentStatus := deployments.NewTransitionDeploymentStatus(
 		deploymentRepository,
 	)
 
+	githubRepositoryID := time.Now().UnixNano()
 	application, err := createApplication.Execute(
 		ctx,
-		usecase2.CreateApplicationInput{
-			Name:          fmt.Sprintf("m02-integration-%d", time.Now().UnixNano()),
-			RepositoryURL: "https://github.com/acme/integration.git",
-			Branch:        "main",
+		applications.CreateApplicationParams{
+			Name:               fmt.Sprintf("m02-integration-%d", githubRepositoryID),
+			RepositoryURL:      "https://github.com/acme/integration.git",
+			Branch:             "main",
+			GitHubRepositoryID: &githubRepositoryID,
 		},
 	)
 	if err != nil {
@@ -74,13 +72,24 @@ func TestPostgresPersistenceAndMigrations(t *testing.T) {
 
 	if _, err := createApplication.Execute(
 		ctx,
-		usecase2.CreateApplicationInput{
+		applications.CreateApplicationParams{
 			Name:          application.Name,
 			RepositoryURL: "https://github.com/acme/duplicate.git",
 			Branch:        "main",
 		},
 	); !errors.Is(err, applications.ErrConflict) {
 		t.Fatalf("duplicate application creation error = %v, want ErrConflict", err)
+	}
+	if _, err := createApplication.Execute(
+		ctx,
+		applications.CreateApplicationParams{
+			Name:               fmt.Sprintf("m02-duplicate-github-repository-%d", githubRepositoryID),
+			RepositoryURL:      "https://github.com/acme/duplicate.git",
+			Branch:             "main",
+			GitHubRepositoryID: &githubRepositoryID,
+		},
+	); !errors.Is(err, applications.ErrConflict) {
+		t.Fatalf("duplicate GitHub repository creation error = %v, want ErrConflict", err)
 	}
 	t.Cleanup(func() {
 		db.WithContext(context.Background()).Exec(
@@ -101,8 +110,8 @@ func TestPostgresPersistenceAndMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create deployment: %v", err)
 	}
-	if deployment.Status != deploymentdomain.StatusQueued {
-		t.Fatalf("deployment status = %q, want %q", deployment.Status, deploymentdomain.StatusQueued)
+	if deployment.Status != deployments.StatusQueued {
+		t.Fatalf("deployment status = %q, want %q", deployment.Status, deployments.StatusQueued)
 	}
 	history, err := listDeploymentsByApplication.Execute(ctx, application.ID, 10, 0)
 	if err != nil {
@@ -114,14 +123,14 @@ func TestPostgresPersistenceAndMigrations(t *testing.T) {
 
 	transitionResults := make(chan error, 2)
 	var transitions sync.WaitGroup
-	for _, target := range []string{deploymentdomain.StatusBuilding, deploymentdomain.StatusCancelled} {
+	for _, target := range []string{deployments.StatusBuilding, deployments.StatusCancelled} {
 		transitions.Add(1)
 		go func(status string) {
 			defer transitions.Done()
 			_, transitionErr := deploymentRepository.TransitionStatus(
 				ctx,
 				deployment.ID,
-				deploymentdomain.StatusQueued,
+				deployments.StatusQueued,
 				status,
 				nil,
 			)
@@ -150,13 +159,13 @@ func TestPostgresPersistenceAndMigrations(t *testing.T) {
 	if failedDeployment.CommitSHA == nil || *failedDeployment.CommitSHA != "abcdef0123456789abcdef0123456789abcdef01" {
 		t.Fatalf("deployment default-branch SHA = %v, want persisted resolved SHA", failedDeployment.CommitSHA)
 	}
-	if _, err := transitionDeploymentStatus.Execute(ctx, failedDeployment.ID, deploymentdomain.StatusBuilding, ""); err != nil {
+	if _, err := transitionDeploymentStatus.Execute(ctx, failedDeployment.ID, deployments.StatusBuilding, ""); err != nil {
 		t.Fatalf("transition deployment to building: %v", err)
 	}
 	failedDeployment, err = transitionDeploymentStatus.Execute(
 		ctx,
 		failedDeployment.ID,
-		deploymentdomain.StatusFailed,
+		deployments.StatusFailed,
 		"integration failure diagnostic",
 	)
 	if err != nil {
@@ -183,9 +192,9 @@ func TestPostgresPersistenceAndMigrations(t *testing.T) {
 		t.Fatalf("get reopened SQL database: %v", err)
 	}
 	t.Cleanup(func() { _ = persistedSQLDB.Close() })
-	persistedApplicationRepository := applicationpostgres.NewRepository(persistedDB)
-	persistedGetApplicationByID := usecase2.NewGetApplicationByID(persistedApplicationRepository)
-	persistedDeploymentRepository := deploymentpostgres.NewRepository(persistedDB)
+	persistedApplicationRepository := applications.NewApplicationRepository(persistedDB)
+	persistedGetApplicationByID := applications.NewGetApplicationByID(persistedApplicationRepository)
+	persistedDeploymentRepository := deployments.NewDeploymentRepository(persistedDB)
 	persistedApplication, err := persistedGetApplicationByID.Execute(ctx, application.ID)
 	if err != nil {
 		t.Fatalf("retrieve application after reopening pool: %v", err)
@@ -197,7 +206,7 @@ func TestPostgresPersistenceAndMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retrieve deployment after reopening pool: %v", err)
 	}
-	if persistedDeployment.Status != deploymentdomain.StatusBuilding && persistedDeployment.Status != deploymentdomain.StatusCancelled {
+	if persistedDeployment.Status != deployments.StatusBuilding && persistedDeployment.Status != deployments.StatusCancelled {
 		t.Errorf("persisted status = %q, want building or cancelled", persistedDeployment.Status)
 	}
 	persistedFailure, err := persistedDeploymentRepository.GetByID(ctx, failedDeployment.ID)
@@ -237,7 +246,7 @@ func TestPostgresBuildQueueClaiming(t *testing.T) {
 	var pendingBuilds int64
 	if err := db.WithContext(ctx).
 		Table("deployments").
-		Where("status IN ?", []string{deploymentdomain.StatusQueued, deploymentdomain.StatusBuilding}).
+		Where("status IN ?", []string{deployments.StatusQueued, deployments.StatusBuilding}).
 		Count(&pendingBuilds).Error; err != nil {
 		t.Fatalf("check integration database queue: %v", err)
 	}
@@ -245,7 +254,7 @@ func TestPostgresBuildQueueClaiming(t *testing.T) {
 		t.Skip("PostgreSQL build queue integration test requires no pre-existing queued or building deployments")
 	}
 
-	applicationRepository := applicationpostgres.NewRepository(db)
+	applicationRepository := applications.NewApplicationRepository(db)
 	application, err := applicationRepository.CreateApplication(ctx, applications.Application{
 		Name:          fmt.Sprintf("build-queue-integration-%d", time.Now().UnixNano()),
 		RepositoryURL: "https://github.com/acme/build-queue-integration.git",
@@ -254,7 +263,7 @@ func TestPostgresBuildQueueClaiming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create integration application: %v", err)
 	}
-	deploymentRepository := deploymentpostgres.NewRepository(db)
+	deploymentRepository := deployments.NewDeploymentRepository(db)
 	t.Cleanup(func() {
 		_ = db.WithContext(context.Background()).Exec(
 			"DELETE FROM deployments WHERE application_id = ?",
@@ -266,7 +275,7 @@ func TestPostgresBuildQueueClaiming(t *testing.T) {
 		).Error
 	})
 
-	if _, err := deploymentRepository.ClaimNextQueued(ctx); !errors.Is(err, deploymentdomain.ErrNoQueuedBuild) {
+	if _, err := deploymentRepository.ClaimNextQueued(ctx); !errors.Is(err, deployments.ErrNoQueuedBuild) {
 		t.Fatalf("empty queue claim error = %v, want ErrNoQueuedBuild", err)
 	}
 
@@ -281,7 +290,7 @@ func TestPostgresBuildQueueClaiming(t *testing.T) {
 	}
 
 	type claimResponse struct {
-		deployment deploymentdomain.Deployment
+		deployment deployments.Deployment
 		err        error
 	}
 	start := make(chan struct{})
@@ -300,17 +309,17 @@ func TestPostgresBuildQueueClaiming(t *testing.T) {
 	claimers.Wait()
 	close(responses)
 
-	var claimed deploymentdomain.Deployment
+	var claimed deployments.Deployment
 	emptyResults := 0
 	for response := range responses {
-		if errors.Is(response.err, deploymentdomain.ErrNoQueuedBuild) {
+		if errors.Is(response.err, deployments.ErrNoQueuedBuild) {
 			emptyResults++
 			continue
 		}
 		if response.err != nil {
 			t.Fatalf("concurrent queue claim failed: %v", response.err)
 		}
-		if response.deployment.Status != deploymentdomain.StatusBuilding {
+		if response.deployment.Status != deployments.StatusBuilding {
 			t.Fatalf("claimed status = %q, want building", response.deployment.Status)
 		}
 		if response.deployment.ID != first.ID && response.deployment.ID != second.ID {
@@ -326,7 +335,7 @@ func TestPostgresBuildQueueClaiming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read claimed deployment: %v", err)
 	}
-	if persistedClaim.Status != deploymentdomain.StatusBuilding || persistedClaim.BuildStartedAt == nil {
+	if persistedClaim.Status != deployments.StatusBuilding || persistedClaim.BuildStartedAt == nil {
 		t.Fatalf("claimed deployment state = %q, started at %v; want building with start time", persistedClaim.Status, persistedClaim.BuildStartedAt)
 	}
 
@@ -344,7 +353,7 @@ func TestPostgresBuildQueueClaiming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("record successful build: %v", err)
 	}
-	if built.Status != deploymentdomain.StatusBuilt || built.BuildFinishedAt == nil {
+	if built.Status != deployments.StatusBuilt || built.BuildFinishedAt == nil {
 		t.Fatalf("successful build result = status %q, finished at %v", built.Status, built.BuildFinishedAt)
 	}
 
@@ -356,7 +365,7 @@ func TestPostgresBuildQueueClaiming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim remaining deployment: %v", err)
 	}
-	if next.ID != remainingID || next.Status != deploymentdomain.StatusBuilding {
+	if next.ID != remainingID || next.Status != deployments.StatusBuilding {
 		t.Fatalf("next claim = %d/%q, want %d/building", next.ID, next.Status, remainingID)
 	}
 	failureMessage := "integration build failure"
@@ -372,10 +381,10 @@ func TestPostgresBuildQueueClaiming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("record failed build: %v", err)
 	}
-	if failed.Status != deploymentdomain.StatusFailed || failed.ErrorMessage == nil || *failed.ErrorMessage != failureMessage {
+	if failed.Status != deployments.StatusFailed || failed.ErrorMessage == nil || *failed.ErrorMessage != failureMessage {
 		t.Fatalf("failed build result = status %q, error %v", failed.Status, failed.ErrorMessage)
 	}
-	if _, err := deploymentRepository.ClaimNextQueued(ctx); !errors.Is(err, deploymentdomain.ErrNoQueuedBuild) {
+	if _, err := deploymentRepository.ClaimNextQueued(ctx); !errors.Is(err, deployments.ErrNoQueuedBuild) {
 		t.Fatalf("drained queue claim error = %v, want ErrNoQueuedBuild", err)
 	}
 
@@ -390,8 +399,8 @@ func TestPostgresBuildQueueClaiming(t *testing.T) {
 	if err := closedSQLDB.Close(); err != nil {
 		t.Fatalf("close failure-check database: %v", err)
 	}
-	_, err = deploymentpostgres.NewRepository(closedDB).ClaimNextQueued(ctx)
-	if err == nil || errors.Is(err, deploymentdomain.ErrNoQueuedBuild) {
+	_, err = deployments.NewDeploymentRepository(closedDB).ClaimNextQueued(ctx)
+	if err == nil || errors.Is(err, deployments.ErrNoQueuedBuild) {
 		t.Fatalf("closed database claim error = %v, want a propagated database error", err)
 	}
 }

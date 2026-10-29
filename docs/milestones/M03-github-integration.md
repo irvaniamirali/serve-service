@@ -1,77 +1,50 @@
 # M03 — GitHub Integration
 
-## Goal
+## Status
 
-Connect GitHub repository events to deployment requests in a verifiable and idempotent way.
+In progress. The repository has a GitHub API client, HMAC-SHA256 verification, push parsing, branch filtering, a webhook delivery table, and deployment creation. Remaining gaps include repository-name verification, atomic delivery/deployment persistence, recovery of deliveries left in `processing`, and PostgreSQL-backed duplicate-delivery tests. Do not treat the current webhook code as fully reliable yet.
 
-## Planned Features
+## Goal and scope
 
-- [x] Define how a repository is registered with the platform.
-- [x] Implement a webhook endpoint.
-- [x] Verify webhook signatures using the configured secret.
-- [x] Parse relevant push events.
-- [x] Filter events by the configured branch.
-- [x] Record the exact commit SHA associated with each request.
-- [x] Handle duplicate delivery IDs idempotently.
-- [x] Record webhook processing outcomes.
-- [x] Ignore unrelated event types safely.
-- [x] Provide a manual deployment trigger through the API.
-- [x] Add tests for valid, invalid, duplicate, and irrelevant events.
-- [x] Document webhook setup and troubleshooting.
+Turn authenticated GitHub push deliveries into exactly traceable deployment requests without building synchronously or depending on live GitHub during ordinary tests.
 
-## Repository registration
+The existing webhook endpoints are `/api/v1/webhooks/github` and `/api/v1/github/webhooks`. `GITHUB_WEBHOOK_SECRET` is a server-wide secret; the per-application `webhook_secret` column is not currently used. Manual deployment without a SHA resolves GitHub's repository default branch, while webhook deployments use the application's configured branch. Decide whether that difference is intentional before completion; the recommended alternative is to make the configured branch the single deployment target.
 
-Applications can include a canonical GitHub repository identity by setting `github_repository_id` when creating the record. The repository URL and deployment branch remain the primary registration data. The webhook secret is configured in the environment as `GITHUB_WEBHOOK_SECRET` and is never serialized in API responses.
+## Implementation stages
 
-## Webhook configuration
+### M03.1 — Repository identity and registration
 
-Configure GitHub to send `push` events to one of the platform endpoints:
+- **Goal/scope:** Bind a webhook to exactly one registered GitHub repository and branch.
+- **Tasks:** Decide when `github_repository_id` is required; compare payload repository ID and canonical `full_name` to registration; reject invalid/non-positive IDs; document global-secret configuration and remove or use the currently unused per-application secret field in a schema-safe way.
+- **Design decision:** Numeric GitHub repository ID is the stable lookup key; canonical owner/name is an additional mismatch check. Alternatives are URL-only matching (rename-sensitive) or storing GitHub API metadata (more schema and sync work).
+- **Security/failures:** A valid signature does not make repository fields trustworthy; reject identity mismatches and never select an application from a branch name alone. Do not store or return secrets unnecessarily.
+- **Tests:** Repository ID match/mismatch, owner/name mismatch, unknown repository, missing registration ID, duplicate ID conflict, and no-live-GitHub handler tests.
+- **Acceptance:** Only an event matching the registered repository can reach branch filtering or deployment creation.
+- **Dependencies:** M02.
+- **Documentation:** `docs/development.md`, `docs/architecture.md`, API examples, and migration notes if schema changes.
 
-- `POST /api/v1/webhooks/github`
-- `POST /api/v1/github/webhooks`
+### M03.2 — Webhook contract and branch/SHA validation
 
-Use the payload format `application/json` and a secret matching `GITHUB_WEBHOOK_SECRET`. The server computes the SHA256 HMAC over the original raw request body and compares it to the `X-Hub-Signature-256` header using constant-time comparison.
+- **Goal/scope:** Accept only well-formed, signed push events for the configured deployment branch.
+- **Tasks:** Preserve raw-body HMAC verification; validate event and delivery headers, JSON shape, repository identity, `refs/heads/...`, deletion markers, and full commit SHA; define precise 2xx/4xx/5xx responses; resolve the manual-versus-webhook branch policy.
+- **Design decision:** Use the push payload's immutable `after` SHA for webhook deployments. Do not fetch a mutable branch tip during processing. Keep webhook processing short; building stays in the worker.
+- **Security/failures:** Reject invalid signatures before writing a delivery record; bound request size; do not log secrets or raw untrusted payloads. Treat malformed payloads and ignored events distinctly.
+- **Tests:** Unit tests for signature, payload, SHA, and branch cases; HTTP tests for valid push, wrong branch, deletion, irrelevant event, malformed JSON, missing headers, invalid signature, and error responses.
+- **Acceptance:** Valid signed pushes create queued deployments only for the selected branch and exact event SHA; other events create none.
+- **Dependencies:** M03.1.
+- **Documentation:** Webhook setup/troubleshooting in `docs/development.md`; behavior in this milestone and `docs/architecture.md`.
 
-## Branch and deployment validation
+### M03.3 — Atomic idempotency and recovery
 
-The webhook handler accepts pushes only when the event `ref` matches the configured deployment branch for the application, such as `refs/heads/main` matching an application branch of `main`. Branch deletion events and non-branch refs are ignored. The actual deployment request stores the immutable `after` SHA from the push payload instead of trusting the branch name alone.
+- **Goal/scope:** Make GitHub retries safe and observable across process/database failures.
+- **Tasks:** Make delivery registration, deployment insertion, and terminal delivery outcome one transaction; on unique delivery conflict, return the persisted outcome/deployment; define how any committed `processing` record is recovered; propagate persistence errors instead of returning success-shaped responses.
+- **Design decision:** Prefer a single PostgreSQL transaction for database-only processing; do not hold it open across GitHub network calls. If lease-based processing is needed, add an explicit lease and retry rule rather than treating every `processing` row as a completed duplicate.
+- **Security/failures:** Handle concurrent duplicate requests, transaction rollback, database outage, crash between steps, and delivery-ID collision safely. Keep bounded, non-secret failure reasons.
+- **Tests:** PostgreSQL integration tests for concurrent duplicate delivery, retry after rollback, completed duplicate response, ignored event persistence, and worker/database failure; handler tests remain independent of live GitHub.
+- **Acceptance:** One delivery creates at most one deployment; retries return a result that accurately reflects the committed processing outcome; no silent stuck delivery remains.
+- **Dependencies:** M03.2 and M02 PostgreSQL integration setup.
+- **Documentation:** Transaction/idempotency behavior, operational retry guidance, and updated API responses.
 
-## Delivery idempotency
+## Exit condition
 
-Every webhook delivery is recorded with a unique `X-GitHub-Delivery` value in the database. If the same delivery is retried, the server returns a safe duplicate response instead of creating a second deployment. Processed, ignored, and failed outcomes are persisted in `github_webhook_deliveries` for investigation and safe retry decisions.
-
-## Manual deployment trigger
-
-The existing deployment endpoint remains the manual trigger path and accepts `commit_sha` for an explicit immutable revision. The same validation rules apply as for webhook-triggered deployments. Authentication remains outside the scope of this milestone unless the surrounding deployment environment provides it.
-
-## Reliability Requirements
-
-- Invalid signatures must be rejected.
-- Duplicate deliveries must not create duplicate deployment requests.
-- The system must not trust a branch name alone as an immutable source revision.
-- Webhook handling must not perform long-running image builds synchronously.
-- Failures must leave enough diagnostic information for investigation.
-
-## Acceptance Criteria
-
-- A valid push event for the configured branch creates a deployment request.
-- Events for other branches do not trigger deployments.
-- Invalid signatures are rejected.
-- Duplicate webhook deliveries are handled safely.
-- The requested commit SHA is persisted.
-- Webhook processing failures are observable and documented.
-- Automated tests cover expected and adverse cases.
-
-## Dependencies
-
-M02.
-
-## Out of Scope
-
-- Building container images.
-- Running application containers.
-- Supporting Git providers other than GitHub.
-
-## Exit Condition
-
-M03 is complete when GitHub changes reliably create traceable deployment requests without duplicate processing.
+M03 is complete when each stage passes, webhook outcome persistence is reliable under retries and process failure, and manual/webhook branch semantics are explicit. This milestone does not build images.

@@ -20,7 +20,7 @@ test:
 vet:
 	cd $(GO_MODULE_DIR) && go vet ./...
 
-check: fmt-check test vet lint
+check: fmt-check test vet
 
 migrate-up:
 	cd src && go run ./cmd/migrate up

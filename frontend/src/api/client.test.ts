@@ -44,8 +44,8 @@ describe('API client', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
         error: {
-          code: 'application_name_conflict',
-          message: 'An application with this name already exists',
+          code: 'application_conflict',
+          message: 'An application with this name or GitHub repository is already registered',
         },
       }), { status: 409 }),
     ))
@@ -57,8 +57,8 @@ describe('API client', () => {
     })).rejects.toMatchObject({
       name: 'ApiError',
       status: 409,
-      code: 'application_name_conflict',
-      message: 'An application with this name already exists',
+      code: 'application_conflict',
+      message: 'An application with this name or GitHub repository is already registered',
     } satisfies Partial<ApiError>)
   })
 

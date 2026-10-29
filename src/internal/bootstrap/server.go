@@ -6,12 +6,8 @@ import (
 	"os"
 
 	"github.com/gofiber/fiber/v2"
-	applicationcontroller "github.com/irvaniamirali/serve-service/internal/domains/applications/adapters/http/controllers"
-	applicationpostgres "github.com/irvaniamirali/serve-service/internal/domains/applications/adapters/postgres"
-	"github.com/irvaniamirali/serve-service/internal/domains/applications/usecase"
-	deploymentcontroller "github.com/irvaniamirali/serve-service/internal/domains/deployments/adapters/http/controllers"
-	deploymentpostgres "github.com/irvaniamirali/serve-service/internal/domains/deployments/adapters/postgres"
-	usecase2 "github.com/irvaniamirali/serve-service/internal/domains/deployments/usecase"
+	"github.com/irvaniamirali/serve-service/internal/applications"
+	"github.com/irvaniamirali/serve-service/internal/deployments"
 	githubclient "github.com/irvaniamirali/serve-service/internal/github"
 	"github.com/irvaniamirali/serve-service/internal/infrastructure/httpx"
 	"gorm.io/gorm"
@@ -28,37 +24,41 @@ type healthResponse struct {
 
 // NewServer wires the API's repositories, use cases, controllers, and routes.
 func NewServer(db *gorm.DB) *fiber.App {
-	applicationRepository := applicationpostgres.NewRepository(db)
-	deploymentRepository := deploymentpostgres.NewRepository(db)
-	setGitHubWebhookProcessor(
+	applicationRepository := applications.NewApplicationRepository(db)
+	deploymentRepository := deployments.NewDeploymentRepository(db)
+	webhookProcessor := newGitHubWebhookProcessor(
 		applicationRepository,
 		deploymentRepository,
 		webhookSecretFromEnvironment(),
 		db,
 	)
-	applicationHTTPHandler := applicationcontroller.NewHandler(
-		usecase.NewCreateApplication(applicationRepository),
-		usecase.NewGetApplicationByID(applicationRepository),
-		usecase.NewListApplications(applicationRepository),
+	applicationHTTPHandler := applications.NewHandler(
+		applications.NewCreateApplication(applicationRepository),
+		applications.NewGetApplicationByID(applicationRepository),
+		applications.NewListApplications(applicationRepository),
 	)
-	deploymentHTTPHandler := deploymentcontroller.NewHandler(
-		usecase2.NewCreateDeployment(
+	deploymentHTTPHandler := deployments.NewHandler(
+		deployments.NewCreateDeployment(
 			deploymentRepository,
 			applicationRepository,
 			githubclient.NewClient(os.Getenv("GITHUB_TOKEN")),
 		),
-		usecase2.NewGetDeploymentByID(deploymentRepository),
-		usecase2.NewListDeploymentsByApplication(deploymentRepository, applicationRepository),
+		deployments.NewGetDeploymentByID(deploymentRepository),
+		deployments.NewListDeploymentsByApplication(deploymentRepository, applicationRepository),
 	)
 
-	return newServer(applicationHTTPHandler, deploymentHTTPHandler)
+	return newServer(applicationHTTPHandler, deploymentHTTPHandler, webhookProcessor)
 }
 
 type routeRegistrar interface {
 	RegisterRoutes(fiber.Router)
 }
 
-func newServer(applicationHTTPHandler, deploymentHTTPHandler routeRegistrar) *fiber.App {
+func newServer(
+	applicationHTTPHandler routeRegistrar,
+	deploymentHTTPHandler routeRegistrar,
+	webhookProcessor *GitHubWebhookProcessor,
+) *fiber.App {
 	app := fiber.New(fiber.Config{
 		BodyLimit: 1 << 20,
 		ErrorHandler: func(ctx *fiber.Ctx, err error) error {
@@ -77,7 +77,7 @@ func newServer(applicationHTTPHandler, deploymentHTTPHandler routeRegistrar) *fi
 	})
 
 	app.Get(healthPath, healthHandler)
-	registerGitHubWebhookRoute(app)
+	webhookProcessor.registerRoutes(app)
 	api := app.Group("/api/v1")
 	applicationHTTPHandler.RegisterRoutes(api)
 	deploymentHTTPHandler.RegisterRoutes(api)
