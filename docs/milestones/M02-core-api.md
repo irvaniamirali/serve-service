@@ -2,119 +2,76 @@
 
 ## Status
 
-Implemented. 
+Implementation is present. Go unit and HTTP tests pass. PostgreSQL integration tests are opt-in and were not enabled during the current work, so database acceptance remains environment-dependent.
 
 ## Goal
 
-Implement the persistent backend domain for applications and deployments before connecting external Git events or executing builds.
+Persist application registrations and deployment lifecycle state before relying on external events or executing builds.
 
-## Initial Domain Concepts
+## Implemented behavior
 
-### Application
+The API is under `/api/v1`:
 
-Represents a deployable application and its source configuration, including repository URL, configured branch, and application-specific settings.
-
-### Deployment
-
-Represents one attempt to deploy a specific source revision. It should retain a stable identifier, source commit when known, lifecycle status, timestamps, and diagnostic metadata.
-
-## Planned Features
-
-- [x] Create and retrieve application records.
-- [x] Validate HTTPS/SSH repository URLs and Git branch configuration.
-- [x] Create deployment requests through the API without executing them.
-- [x] Retrieve a deployment and its current status.
-- [x] List deployment history for an application with deterministic pagination.
-- [x] Persist records in PostgreSQL.
-- [x] Add a forward-only schema migration for the configured branch, commit SHA validation, and history index.
-- [x] Define allowed deployment state transitions and atomically persist them.
-- [x] Use consistent, non-sensitive API error responses.
-- [x] Add focused unit, HTTP, and opt-in PostgreSQL integration tests.
-- [x] Document API endpoints, request examples, and state transitions.
-
-## Initial Deployment States
-
-The lifecycle contains `queued`, `building`, `deploying`, `healthy`, `failed`, and `cancelled`.
-
-Allowed transitions:
-
-```text
-queued    -> building | cancelled
-building  -> deploying | failed | cancelled
-deploying -> healthy | failed | cancelled
-```
-
-`healthy`, `failed`, and `cancelled` are terminal. Failure transitions require a concise diagnostic message. The API creates deployments in `queued`; it does not expose a status-update endpoint. Internal worker code can use the deployment use case's validated, compare-and-set transition operation.
-
-## API
-
-All API paths are prefixed with `/api/v1`.
-
-| Method | Path | Behavior |
+| Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/applications` | Create an application; returns `201`. |
-| `GET` | `/applications/{id}` | Retrieve an application; returns `200`. |
-| `POST` | `/applications/{id}/deployments` | Queue a deployment request; returns `201`. The JSON body is optional. |
-| `GET` | `/deployments/{id}` | Retrieve deployment status and metadata; returns `200`. |
-| `GET` | `/applications/{id}/deployments?limit=20&offset=0` | List deployment history, newest first; returns `200`. |
+| `POST` | `/applications` | Create an application. |
+| `GET` | `/applications` | List applications with limit/offset pagination. |
+| `GET` | `/applications/{id}` | Retrieve an application. |
+| `POST` | `/applications/{id}/deployments` | Queue a deployment for an explicit SHA or resolve a repository default-branch SHA. |
+| `GET` | `/deployments/{id}` | Retrieve deployment status and metadata. |
+| `GET` | `/deployments/{id}/logs` | Retrieve bounded build output. |
+| `GET` | `/applications/{id}/deployments` | List application deployment history. |
 
-Application creation body:
+Applications store a repository URL, configured branch, and optional GitHub repository ID. Deployments store a commit SHA, status, failure details, and—when a worker has built it—image identity and bounded build output.
 
-```json
-{
-  "name": "demo",
-  "repository_url": "https://github.com/acme/demo.git",
-  "branch": "main"
-}
-```
+Duplicate application names and duplicate registered GitHub repository IDs return `409` with error code `application_conflict`.
 
-Deployment creation can include a commit SHA when known:
+The lifecycle states are `queued`, `building`, `built`, `deploying`, `healthy`, `failed`, and `cancelled`. The HTTP API creates queued work but does not permit arbitrary status changes. Allowed transitions are defined by the deployment model and enforced by use cases and compare-and-set persistence operations.
 
-```json
-{
-  "commit_sha": "abcdef0123456789abcdef0123456789abcdef01"
-}
-```
+The API has no authentication. The build-log endpoint is therefore suitable only for a trusted operator environment.
 
-Repository URLs must be valid HTTPS or SSH URLs without embedded credentials (SSH may use the `git` username); branches follow Git ref-name restrictions. Commit object IDs may be 40 or 64 hexadecimal characters.
+## Architecture and test layout
 
-Errors have one stable shape:
+- `internal/applications` and `internal/deployments` keep related domain models, validation, use cases, HTTP handlers, and contracts together.
+- `internal/infrastructure/database` owns GORM records, PostgreSQL queries, and persistence adapters.
+- `internal/bootstrap` wires concrete adapters into handlers and workers.
+- Use-case unit tests are split by operation (`create_application_test.go`, `get_application_by_id_test.go`, `list_applications_test.go`; the equivalent deployment files are similarly separated).
+- HTTP tests stay with handlers/bootstrap; PostgreSQL persistence and queue tests stay in `database_integration_test.go`.
 
-```json
-{
-  "error": {
-    "code": "application_not_found",
-    "message": "Application not found"
-  }
-}
-```
+This keeps the domain packages independent of GORM and PostgreSQL while avoiding a directory per architectural layer.
 
-Invalid bodies/fields return `400`, missing records return `404`, duplicate application names return `409`, and unexpected errors return a generic `500` without database details. History `limit` is 1–100 (default 20), and `offset` is non-negative (default 0).
+## Remaining verification stages
 
-## Acceptance Criteria
+### M02.1 — Unit and HTTP behavior
 
-- Application and deployment records can be created and retrieved.
-- Records persist across backend restarts.
-- Deployment history is queryable in deterministic order.
-- Invalid requests return predictable errors.
-- Illegal state transitions are rejected.
-- Concurrent requests do not silently corrupt persistent state.
-- Tests cover successful requests and important failure cases.
-- API behavior is documented.
+- **Goal/scope:** Verify API contracts, validation, state rules, and error mapping.
+- **Tasks:** Keep boundary request/response names explicit; cover invalid input, not-found, conflict, dependency failure, pagination, and state transitions.
+- **Decision/alternative:** Keep transport-specific structures in the current flat domain package rather than introducing a controller package solely for naming.
+- **Security/failures:** Avoid exposing database diagnostics or build logs in general deployment JSON; reject invalid IDs before repository operations.
+- **Tests:** Focused use-case tests and Fiber HTTP tests.
+- **Acceptance:** Invalid inputs do not reach persistence; expected errors map to stable HTTP responses.
+- **Dependencies:** M01.
+- **Documentation:** This page and `docs/development.md`.
 
-The PostgreSQL integration check is opt-in: set `RUN_DATABASE_INTEGRATION_TESTS=1` and configure the database environment variables before running `make test`. It applies pending Goose migrations, writes test records, reopens the database handle to verify persistence, and removes its records.
+### M02.2 — PostgreSQL behavior
+
+- **Goal/scope:** Validate migrations, durable persistence, ordering, and concurrency against PostgreSQL.
+- **Tasks:** Run the opt-in integration suite on an isolated database; verify migration state, persisted application/deployment data, duplicate constraints, concurrent transitions, queue claiming, and failure propagation.
+- **Decision/alternative:** Keep integration tests opt-in because they apply migrations and write records; do not substitute mocks for PostgreSQL locking behavior.
+- **Security/failures:** Use a disposable test database and verify cleanup. The queue claim test requires no pre-existing queued/building deployments.
+- **Tests:** `RUN_DATABASE_INTEGRATION_TESTS=1 go test ./internal/infrastructure/database -count=1`.
+- **Acceptance:** The complete integration suite passes against the supported PostgreSQL version and leaves no test records.
+- **Dependencies:** M01 and M02.1.
+- **Documentation:** `docs/development.md` and this page.
 
 ## Dependencies
 
 M01.
 
-## Out of Scope
+## Out of scope
 
-- Actual GitHub webhook processing.
-- Container image building.
-- Starting application containers.
-- A full user authentication and authorization system.
+Public authentication/authorization, building or running workloads as part of an HTTP request, and multi-host scheduling.
 
-## Exit Condition
+## Exit condition
 
-M02 is complete when the API can reliably represent applications and deployment attempts, ready for integration with GitHub events.
+Declare M02 complete only after M02.1 and M02.2 pass in the target environment and the API's trust limitation remains clearly documented.

@@ -1,29 +1,23 @@
 # Project Overview
 
-## Purpose
+Serve Service is a learning-driven project for building and operating a Git-to-deployment workflow on one Linux host. It is intended to teach practical Go, databases, Linux, networking, Git, Docker, build systems, security boundaries, and operational reliability.
 
-This project is a learning-driven project for building a realistic Git-to-deployment system and understanding the engineering work behind it.
+## Current implementation
 
-## Intended Workflow
+The Go API persists application registrations and deployment requests in PostgreSQL. GitHub webhook verification and a background worker that builds the exact recorded commit using the local Docker Engine are present. The frontend is a separate React/TypeScript/Vite development application. Application containers and HTTP routing are not implemented.
 
-GitHub push → webhook verification → deployment request → source checkout → image build → container runtime → HTTP routing.
+## Intended workflow
 
-## Initial Environment
+Register a repository and branch → verify a GitHub push → create an idempotent deployment request → check out the exact commit → build an image → start it on the host → route HTTP traffic.
 
-- One Linux host.
-- Docker-based builds and runtime.
-- GitHub as the first source provider.
-- HTTP access to deployed applications.
-- A documented, testable operating model.
+Each arrow after image build is planned work. Current integration status and dependencies are in the [roadmap](roadmap.md).
 
-## Non-Goals
+## Constraints
 
-The initial project is not intended to be a commercial competitor to hosted deployment services. Kubernetes, multi-host scheduling, billing, and broad buildpack support are deferred.
+- Start with one Linux host; do not introduce Kubernetes or a multi-host scheduler without a demonstrated need.
+- Treat repository content and Dockerfile instructions as untrusted.
+- The current host Docker Engine build is acceptable only for operator-trusted repositories; it is not strong isolation.
+- Test adverse cases and preserve explicit failure state.
+- Keep each milestone independently verifiable and document its design trade-offs.
 
-## Engineering Priorities
-
-- Reproducibility.
-- Observability and useful diagnostics.
-- Security boundaries for untrusted source code.
-- Testable failure handling.
-- Clear architecture and decision records.
+See the [architecture](architecture.md), [M00 project definition](milestones/M00-project-definition.md), and [M04 security boundary](milestones/M04-build-engine.md).

@@ -2,9 +2,7 @@
 
 ## Status
 
-**Status:** Go, Fiber v2, PostgreSQL/pgx, and Goose are implemented for M02. Other proposed integrations remain subject to review.
-
-This document describes the selected stack for implemented M02 behavior and proposed choices for later milestones. Significant new decisions should be reviewed and recorded in Architecture Decision Records (ADRs).
+The Go API, Fiber v2, PostgreSQL through GORM/pgx, Goose migrations, GitHub REST client, and local Git/Docker build worker are present. The worker and webhook milestones are still in progress. No container runtime manager, ingress proxy, Docker Compose file, or OpenAPI contract is implemented.
 
 Dependency and tool versions must be pinned in the relevant manifests, lockfiles, and CI configuration.
 
@@ -18,32 +16,24 @@ Dependency and tool versions must be pinned in the relevant manifests, lockfiles
 6. Keep the API independent of any particular client interface.
 7. Preserve a path toward stronger workload isolation and independent workers.
 
-## Proposed Stack
+## Stack inventory
 
-| Area                        | Proposal                                                      | Rationale                                                                                                            |
-| --------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Backend language            | Go                                                            | Suitable for infrastructure services, concurrency, and compiled deployment artifacts.                                |
-| HTTP framework              | Fiber                                                         | Provides routing, middleware, and an ergonomic API for HTTP services.                                                |
-| API format                  | JSON over HTTP                                                | Straightforward integration with CLI tools and future clients.                                                       |
-| API specification           | OpenAPI                                                       | Documents request/response contracts and supports contract validation.                                               |
-| Database                    | PostgreSQL                                                    | Durable relational storage and transaction support for project and deployment metadata.                              |
-| PostgreSQL driver           | `pgx`                                                         | Explicit PostgreSQL support for Go. Compatibility with the selected Fiber and database integration must be verified. |
-| Database migrations         | Goose                                                         | Versioned SQL schema changes with a straightforward workflow.                                                        |
-| Container build and runtime | Docker Engine                                                 | Supports the initial Dockerfile-based build and single-host runtime model.                                           |
-| Source checkout             | Git CLI                                                       | Uses the established Git toolchain for repository operations.                                                        |
-| HTTP ingress                | Caddy, pending review                                         | Provides HTTP routing without requiring the ingress proxy to access the Docker socket.                               |
-| Configuration               | Environment variables with startup validation                 | Separates runtime configuration from application code.                                                               |
-| Logging                     | Go `log/slog`, or a compatible structured logging integration | Structured logs with consistent fields and useful deployment context.                                                |
-| Backend tests               | Go `testing` and Fiber-compatible HTTP testing                | Supports unit tests and HTTP-level verification.                                                                     |
-| Go formatting               | `gofmt`                                                       | Standardized Go formatting.                                                                                          |
-| Local dependencies          | Docker Compose                                                | Reproducible development services.                                                                                   |
-| CI                          | GitHub Actions                                                | Automated checks for proposed changes.                                                                               |
+| Area | Current implementation | Planned or open |
+|---|---|---|
+| Backend | Go 1.26.5, Fiber v2, JSON over HTTP | OpenAPI contract is not selected. |
+| Persistence | PostgreSQL, GORM, pgx driver, Goose SQL migrations | Local PostgreSQL provisioning is not containerized. |
+| GitHub | Go `net/http` client, raw-body HMAC-SHA256 verification | Reliable transactional webhook idempotency remains M03 work. |
+| Build | Git CLI and host Docker Engine; root Dockerfile only | Runtime management and ingress are not implemented. |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS v4 | Production asset delivery is open. |
+| Configuration/logging | Environment variables, startup validation, `log/slog` | More complete secret handling remains future work. |
+| Tests/quality | Go `testing`, Fiber HTTP tests, `gofmt`, `go vet`, GitHub Actions | PostgreSQL tests are opt-in; frontend checks and a Go linter are not in CI. |
+| M05 ingress | None in code | The M05 plan recommends a host-managed proxy and loopback-only reserved ports; validate before implementation. |
 
 ## Backend Architecture
 
 Use a modular Go application rather than microservices.
 
-Keep HTTP handlers, business logic, persistence, deployment orchestration, source checkout, image building, runtime management, and ingress configuration behind explicit package boundaries.
+Keep HTTP handlers, business logic, persistence, deployment orchestration, source checkout, image building, runtime management, and ingress configuration behind explicit package boundaries. Current PostgreSQL adapters are in `internal/infrastructure/database`; application and deployment contracts remain in their flat domain packages.
 
 Fiber should be an HTTP delivery layer, not the place where deployment business rules live. Core services should not depend on Fiber-specific request or response types.
 
@@ -54,7 +44,7 @@ The API and deployment worker may initially share a codebase while running in se
 Fiber is based on `fasthttp`, rather than Go's standard `net/http` server implementation. Before adopting integrations, verify their compatibility with the selected Fiber version.
 
 - Use Fiber's supported handler and middleware interfaces.
-- Verify the chosen PostgreSQL integration and request-context behavior.
+- Verify request-context behavior for the selected Fiber and GORM integration.
 - Use Fiber-compatible HTTP testing utilities for handler tests.
 - Check OpenAPI generation or validation tooling before committing to a particular integration.
 - Avoid unnecessary adapters between `fasthttp` and `net/http`.
@@ -79,13 +69,12 @@ The initial release must be restricted to repositories trusted by the operator. 
 
 ## Decisions Still to Confirm
 
-- [x] Fiber version and required integrations for the M02 API.
-- [x] PostgreSQL driver and migration tool for M02 persistence.
-- [ ] Docker Engine build/runtime integration.
-- [ ] Ingress proxy and controlled route updates.
-- [ ] Worker execution and job recovery strategy.
-- [ ] Logging and configuration conventions.
-- [ ] GitHub Actions quality-check workflow.
-- [ ] Trusted-repository-only security assumption.
+- [x] Fiber version and PostgreSQL/GORM/Goose integration.
+- [x] Local Docker Engine for the trusted-repository build MVP; see [ADR 0001](adr/0001-single-host-build-trust-boundary.md).
+- [x] Durable PostgreSQL queue with one active local build at a time.
+- [ ] Manual deployment branch policy versus webhook-configured branch policy.
+- [ ] M05 runtime port reservation and host-managed ingress details.
+- [ ] Reproducible local PostgreSQL setup.
+- [ ] Authentication and authorization before any non-local deployment.
 
-Material decisions should be recorded in `docs/adr/`. Unresolved choices must remain explicitly open rather than being decided accidentally during implementation.
+Material decisions belong in `docs/adr/`. Unresolved choices must remain explicitly open rather than being decided accidentally during implementation.

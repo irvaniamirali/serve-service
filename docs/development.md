@@ -77,7 +77,7 @@ cd frontend
 npm run dev
 ```
 
-Open the local Vite URL shown in the terminal (normally `http://localhost:5173`). Vite proxies `/api` and `/health` requests to `BACKEND_URL`, which defaults to `http://localhost:8000`. Set `BACKEND_URL` in `web/.env` if the Go server uses another origin. `VITE_API_BASE_URL` defaults to `/api/v1` and should include the API prefix when overridden.
+Open the local Vite URL shown in the terminal (normally `http://localhost:5173`). Vite proxies `/api` and `/health` requests to `BACKEND_URL`, which defaults to `http://localhost:8000`. Set `BACKEND_URL` in `frontend/.env` if the Go server uses another origin. `VITE_API_BASE_URL` defaults to `/api/v1` and should include the API prefix when overridden.
 
 The development proxy keeps browser requests same-origin; the Go API does not configure CORS. The API has no authentication. Applications can be listed and retrieved by ID; deployments can be created, retrieved, and listed for a known application. There is no global deployment list. Manual and webhook deployment requests are persisted as queued work. A background worker checks out the recorded commit and builds its root-level `Dockerfile` with the local Docker Engine; a successful build is exposed as `built` with an image reference and local image ID. Runtime deployment is not implemented. See [the build engine guide](./build-engine.md) for prerequisites, operations, security assumptions, and troubleshooting.
 
@@ -156,11 +156,11 @@ The deployment transition graph is `queued -> building|cancelled`, `building -> 
 
 The frontend repository form and deployment history/details are documented in [`frontend/README.md`](../frontend/README.md). The deployment form accepts an optional full SHA; build prerequisites and limitations are in the [Build Engine guide](./build-engine.md).
 
-Errors use `{"error":{"code":"...","message":"..."}}`. Invalid input returns `400`, missing applications/deployments `404`, duplicate names `409`, GitHub default-commit resolution failures `502`, and unexpected failures return a generic `500` without internal database details.
+Errors use `{"error":{"code":"...","message":"..."}}`. Invalid input returns `400`, missing applications/deployments `404`, duplicate application names or GitHub repository IDs return `409` (`application_conflict`), GitHub default-commit resolution failures `502`, and unexpected failures return a generic `500` without internal database details.
 
 ## Quality checks
 
-Run all checks:
+Run the backend checks used by CI:
 
 ```fish
 make check
@@ -180,15 +180,15 @@ To format Go files:
 make fmt
 ```
 
-PostgreSQL integration checks are opt-in so ordinary unit tests do not mutate a developer database. They apply pending migrations and create/delete their own records. The queue-claiming integration test uses the real PostgreSQL transaction and locking behavior and requires the database to have no pre-existing `queued` or `building` deployments; it skips when that queue is not idle. With a configured local database, run:
+`make check` runs formatting, Go tests, and `go vet`; no Go linter is currently configured. PostgreSQL integration checks are opt-in so ordinary unit tests do not mutate a developer database. They apply pending migrations and create/delete their own records. The queue-claiming integration test uses the real PostgreSQL transaction and locking behavior and requires the database to have no pre-existing `queued` or `building` deployments; it skips when that queue is not idle. With a configured local database, run:
 
 ```fish
 set -lx RUN_DATABASE_INTEGRATION_TESTS 1
 cd src
-go test ./internal/platform/database -run '^TestPostgresBuildQueueClaiming$' -count=1 -v
+go test ./internal/infrastructure/database -run '^TestPostgresBuildQueueClaiming$' -count=1 -v
 ```
 
-Run `go test ./...` from `src` for the full suite, including the existing persistence integration check when enabled.
+Run `go test ./...` from `src` for the full suite, including the persistence integration checks when enabled.
 
 The integration check applies pending migrations, verifies application/deployment persistence after reopening the database handle, and cleans up its own records.
 

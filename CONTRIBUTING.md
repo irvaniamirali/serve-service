@@ -7,7 +7,7 @@
 - Add or update tests for behavior changes.
 - Update documentation when behavior, configuration, or operational procedures change.
 - Never commit credentials, tokens, private keys, local environment files, or generated artifacts.
-- Document important architectural choices in `docs/decisions/`.
+- Document material architectural choices in `docs/adr/`.
 
 ## Definition of Done
 

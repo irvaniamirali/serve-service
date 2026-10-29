@@ -1,66 +1,59 @@
 # M00 — Project Definition
 
+## Status
+
+Partially documented. The learning goal and initial scope are clear; the working threat model and a full set of verified acceptance scenarios are still being consolidated.
+
 ## Goal
 
-Define the initial problem, scope, requirements, architecture boundaries, and engineering workflow before implementation begins.
+Define a deliberately small but realistic Git-to-deployment project that can be built, operated, and understood incrementally.
 
-## Problem Statement
+## Project purpose
 
-Deploying an application from a Git repository often requires developers to configure builds, runtime environments, networking, and repeatable deployments themselves. Platform aims to automate this workflow for a deliberately limited initial environment.
+Serve Service is a learning project for understanding Go services, Linux, networking, databases, Git, Docker, build systems, security boundaries, and operational reliability. It is not initially a commercial product.
 
-## Initial User Journey
+## First user journey
 
-1. An operator registers a GitHub repository and a deployment branch.
-2. A push to the configured branch triggers a deployment request.
-3. Platform checks out the exact commit and builds a container image.
-4. Platform starts the application from that image.
-5. The application becomes reachable through an HTTP endpoint.
-6. The operator can inspect the deployment status and diagnose failures.
+1. An operator registers an application, a repository, and its deployment branch.
+2. A verified GitHub push or manual API request creates a durable deployment for an immutable commit.
+3. A worker checks out and builds that exact commit.
+4. A later runtime stage starts the image and routes HTTP traffic to it.
+5. The operator can inspect lifecycle status and useful failure details.
 
-This is the intended workflow, not a claim that these capabilities already exist.
+Steps 1–3 are represented in current code. Container runtime and HTTP routing are planned, not implemented.
 
-## Initial Scope
+## Scope and constraints
 
-- One Linux host.
-- Docker-based application builds and runtime.
-- GitHub as the initial Git provider.
-- Dockerfile-based builds.
-- HTTP routing to deployed applications.
-- Persistent application and deployment metadata.
-- A documented, testable deployment workflow.
+- One Linux host and PostgreSQL for the first end-to-end system.
+- GitHub is the initial source provider.
+- Dockerfile-based builds use the host's local Docker Engine.
+- The initial trust model is operator-trusted repositories only.
+- API and worker may share the Go codebase; durable state belongs in PostgreSQL.
+- Each milestone delivers a testable increment and covers failures as well as success.
+- Kubernetes, multi-host scheduling, commercial account features, and broad buildpack support are out of scope.
 
-## Out of Scope
+The local Docker build is not a security boundary for hostile code. See [ADR 0001](../adr/0001-single-host-build-trust-boundary.md).
 
-- Kubernetes and multi-host scheduling.
-- Multi-region or high-availability operation.
-- Billing and commercial account management.
-- Supporting every language or buildpack.
-- Unrestricted execution of untrusted workloads.
-- Advanced autoscaling.
+## Architectural principles
 
-## Deliverables
+- HTTP handlers translate transport requests; use cases own application rules.
+- Domain packages declare persistence contracts; infrastructure implements PostgreSQL adapters.
+- `bootstrap` composes concrete dependencies.
+- Deployment records, not an in-memory queue, are the durable work source.
+- A deployment identifies the exact commit, not a branch that can move during execution.
+- Do not add a package, interface, or dependency without a concrete responsibility.
 
-- [ ] `docs/overview.md`
-- [ ] `docs/requirements.md`
-- [ ] `docs/tech-stack.md`
-- [ ] `docs/architecture.md`
-- [ ] Initial threat model and security assumptions
-- [ ] Documentation and coding conventions
-- [ ] Initial architecture decisions recorded as ADRs
+## Acceptance criteria
 
-## Acceptance Criteria
+- Implemented, planned, and future behavior is distinguished in user-facing docs.
+- Every milestone has dependency-aware, testable exit criteria.
+- Security assumptions and accepted trade-offs are recorded.
+- A clean end-to-end Linux acceptance scenario can be run from documented steps.
 
-- The problem and initial user journey are clearly documented.
-- Functional and non-functional requirements are distinguishable.
-- Each proposed component has a defined responsibility.
-- Major technology choices have a rationale and alternatives.
-- Security boundaries and known limitations are documented.
-- The first end-to-end acceptance scenario is agreed upon.
+## Dependencies and follow-up
 
-## Exit Condition
+No prerequisite. M01 depends on M00. Complete the threat-model and acceptance-scenario review before declaring this milestone complete.
 
-M00 is complete when the project scope and initial technical direction are documented well enough to begin M01 without relying on undocumented assumptions.
+## Documentation
 
-## Notes
-
-Technology choices remain proposals until recorded in `docs/technical-stack.md` and, where significant, in an ADR.
+See the [architecture](../architecture.md), [roadmap](../roadmap.md), and [technology stack](../tech-stack.md). The roadmap links every milestone from [M01](./M01-development-foundation.md) through [M18](./M18-final-end-to-end-validation-and-operational-readiness.md).
